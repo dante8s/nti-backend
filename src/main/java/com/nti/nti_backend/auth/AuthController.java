@@ -1,11 +1,14 @@
 package com.nti.nti_backend.auth;
 
 import com.nti.nti_backend.user.Role;
+import com.nti.nti_backend.user.UserDTO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -91,4 +94,21 @@ public class AuthController {
         authService.removeRole(id, Role.valueOf(role));
         return ResponseEntity.ok("Роль видалено");
     }
+
+    @GetMapping("/admin/users/pending")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<List<UserDTO>> getPendingUsers() {
+        return ResponseEntity.ok(
+                authService.getPendingUsers()
+        );
+    }
+
+    @GetMapping("/admin/users")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<List<UserDTO>> getAllUsers() {
+        return ResponseEntity.ok(
+                authService.getAllUsers()
+        );
+    }
+
 }

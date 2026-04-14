@@ -11,6 +11,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -78,15 +79,15 @@ public class AuthService {
             System.out.println("Verification email failed");
         }
 
-        try {
-            emailService.sendNewUserNotification(
-                    user.getName(),
-                    user.getEmail(),
-                    roles.stream().map(Role::name).collect(Collectors.joining(", "))
-            );
-        } catch (Exception e) {
-            System.out.println("Admin email failed");
-        }
+//        try {
+//            emailService.sendNewUserNotification(
+//                    user.getName(),
+//                    user.getEmail(),
+//                    roles.stream().map(Role::name).collect(Collectors.joining(", "))
+//            );
+//        } catch (Exception e) {
+//            System.out.println("Admin email failed");
+//        }
 
         return "Перевірте пошту і підтвердіть email. "
                 + "Після підтвердження очікуйте схвалення адміна.";
@@ -209,7 +210,9 @@ public class AuthService {
     public String verifyEmail(String token) {
         User user = userRepository
                 .findByVerificationToken(token)
-                .orElseThrow(() -> new RuntimeException("Невірний токен"));
+                .orElseThrow(() ->
+                        new RuntimeException("Невірний токен")
+                );
 
         if (user.isEmailVerified()) {
             return "Email вже підтверджений";
@@ -219,7 +222,21 @@ public class AuthService {
         user.setVerificationToken(null);
         userRepository.save(user);
 
-        return "Email підтверджено. Очікуйте схвалення адміністратора.";
+        // Повідомляємо адміна ПІСЛЯ підтвердження email
+        try {
+            emailService.sendNewUserNotification(
+                    user.getName(),
+                    user.getEmail(),
+                    user.getRoles().stream()
+                            .map(Role::name)
+                            .collect(Collectors.joining(", "))
+            );
+        } catch (Exception e) {
+            System.out.println("Admin notification failed");
+        }
+
+        return "Email підтверджено. "
+                + "Очікуйте схвалення адміністратора.";
     }
 
     // -----------------------------------------------
@@ -250,5 +267,34 @@ public class AuthService {
         user.setResetPasswordToken(null);
         user.setResetTokenExpiry(null);
         userRepository.save(user);
+    }
+
+    public List<UserDTO> getPendingUsers() {
+        return userRepository
+                .findByAccountStatus(AccountStatus.PENDING)
+                .stream()
+                .map(this::toUserDTO)
+                .toList();
+    }
+
+    public List<UserDTO> getAllUsers() {
+        return userRepository.findAll()
+                .stream()
+                .map(this::toUserDTO)
+                .toList();
+    }
+
+    private UserDTO toUserDTO(User u) {
+        return new UserDTO(
+                u.getId(),
+                u.getName(),
+                u.getEmail(),
+                u.getRoles().stream()
+                        .map(Role::name)
+                        .collect(Collectors.toSet()),
+                u.getAccountStatus().name(),
+                u.isEmailVerified(),
+                u.getCreatedAt()
+        );
     }
 }
