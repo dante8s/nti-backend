@@ -6,10 +6,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication
-        .UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context
-        .SecurityContextHolder;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -28,44 +26,62 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
-            FilterChain chain)
-            throws ServletException, IOException {
+            FilterChain chain
+    ) throws ServletException, IOException {
 
-        // Беремо header Authorization
+        String path = request.getServletPath();
+
+        // 🔓 1. Пропускаємо ТІЛЬКИ публічні маршрути
+        // Важливо: /api/auth/admin/** має проходити через JWT-фільтр
+        if (path.startsWith("/api/public")
+                || path.equals("/api/auth/register")
+                || path.equals("/api/auth/login")
+                || path.equals("/api/auth/verify")
+                || path.equals("/api/auth/forgot-password")
+                || path.equals("/api/auth/reset-password")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // 2. Беремо Authorization header
         String header = request.getHeader("Authorization");
 
-        // Якщо немає токена — пропускаємо далі
+        // Якщо токена немає — пропускаємо далі
         if (header == null || !header.startsWith("Bearer ")) {
             chain.doFilter(request, response);
             return;
         }
 
-        // Відрізаємо "Bearer " і беремо сам токен
         String token = header.substring(7);
-        String email = jwtUtil.extractEmail(token);
 
-        // Якщо email витягнутий і юзер ще не авторизований
-        if (email != null
-                && SecurityContextHolder.getContext()
-                .getAuthentication() == null) {
+        String email;
+        try {
+            // 3. Пробуємо витягнути email
+            email = jwtUtil.extractEmail(token);
+        } catch (Exception e) {
+            // ❗ Прострочений або некоректний токен — просто пропускаємо
+            chain.doFilter(request, response);
+            return;
+        }
 
-            UserDetails userDetails =
-                    userService.loadUserByUsername(email);
+        // 4. Якщо email є і користувач ще не авторизований
+        if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+            UserDetails userDetails = userService.loadUserByUsername(email);
 
             if (jwtUtil.isTokenValid(token, userDetails)) {
-                // Встановлюємо авторизацію в контекст
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(
                                 userDetails,
                                 null,
                                 userDetails.getAuthorities()
                         );
+
                 auth.setDetails(
-                        new WebAuthenticationDetailsSource()
-                                .buildDetails(request)
+                        new WebAuthenticationDetailsSource().buildDetails(request)
                 );
-                SecurityContextHolder.getContext()
-                        .setAuthentication(auth);
+
+                SecurityContextHolder.getContext().setAuthentication(auth);
             }
         }
 

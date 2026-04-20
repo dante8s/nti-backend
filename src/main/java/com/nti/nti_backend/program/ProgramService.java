@@ -69,4 +69,22 @@ public class ProgramService {
                 p.isActive()
         );
     }
+    public List<ProgramDTO> getByType(ProgramType type) {
+        return programRepository.findByType(type)
+                .stream()
+                .filter(Program::isActive)
+                .map(this::toDTO)
+                .toList();
+    }
+
+    public ProgramDTO getByIdAndType(Long id, ProgramType type) {
+        Program program = programRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Програму не знайдено"));
+
+        if (program.getType() != type) {
+            throw new RuntimeException("Програму не знайдено");
+        }
+
+        return toDTO(program);
+    }
 }

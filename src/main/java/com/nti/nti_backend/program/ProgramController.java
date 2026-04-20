@@ -13,19 +13,29 @@ public class ProgramController {
 
     private final ProgramService programService;
 
-    // Публічні — без токена
-    @GetMapping("/api/public/programs")
-    public ResponseEntity<List<ProgramDTO>> getAll() {
+    // Program A
+    @GetMapping("/api/public/programs-a")
+    public ResponseEntity<List<ProgramDTO>> getAllProgramA() {
+        return ResponseEntity.ok(programService.getByType(ProgramType.PROGRAM_A));
+    }
+
+    // Program B
+    @GetMapping("/api/public/programs-b")
+    public ResponseEntity<List<ProgramDTO>> getAllProgramB() {
+        return ResponseEntity.ok(programService.getByType(ProgramType.PROGRAM_B));
+    }
+
+    @GetMapping("/api/public/programs-a/{id}")
+    public ResponseEntity<ProgramDTO> getProgramA(@PathVariable Long id) {
         return ResponseEntity.ok(
-                programService.getAllActive()
+                programService.getByIdAndType(id, ProgramType.PROGRAM_A)
         );
     }
 
-    @GetMapping("/api/public/programs/{id}")
-    public ResponseEntity<ProgramDTO> getOne(
-            @PathVariable Long id) {
+    @GetMapping("/api/public/programs-b/{id}")
+    public ResponseEntity<ProgramDTO> getProgramB(@PathVariable Long id) {
         return ResponseEntity.ok(
-                programService.getById(id)
+                programService.getByIdAndType(id, ProgramType.PROGRAM_B)
         );
     }
 
