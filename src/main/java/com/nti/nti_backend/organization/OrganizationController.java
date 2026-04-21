@@ -1,0 +1,100 @@
+package com.nti.nti_backend.organization;
+
+import com.nti.nti_backend.organization.dto.AddMemberRequestDTO;
+import com.nti.nti_backend.organization.dto.OrgMemberDTO;
+import com.nti.nti_backend.organization.dto.OrganizationRequestDTO;
+import com.nti.nti_backend.organization.dto.OrganizationResponseDTO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/organizations")
+@RequiredArgsConstructor
+public class OrganizationController {
+
+    private final OrganizationService orgService;
+
+    @PostMapping
+    public ResponseEntity<OrganizationResponseDTO> create(
+            @Valid @RequestBody OrganizationRequestDTO dto
+    ) {
+        OrganizationResponseDTO created = orgService.create(dto);
+        return ResponseEntity
+                .created(URI.create("/api/organizations/" + created.getId()))
+                .body(created);
+    }
+
+    // Get /api/organizations
+    @GetMapping
+    public ResponseEntity<List<OrganizationResponseDTO>> findAll() {
+        return ResponseEntity.ok(orgService.findAll());
+    }
+
+    @GetMapping("/my")
+    public ResponseEntity<List<OrganizationResponseDTO>> getMyOrganizations() {
+        return ResponseEntity.ok(orgService.getMyOrganizations());
+    }
+
+    // Get /api/organizations/{id}
+    @GetMapping("/{id}")
+    public ResponseEntity<OrganizationResponseDTO> findById(@PathVariable UUID id) {
+        return ResponseEntity.ok(orgService.findById(id));
+    }
+
+    // PUT /api/organizations/{id}
+    @PutMapping("/{id}")
+    public ResponseEntity<OrganizationResponseDTO> update(
+            @PathVariable UUID id,
+            @Valid @RequestBody OrganizationRequestDTO dto
+    ) {
+        return ResponseEntity.ok(orgService.update(id, dto));
+    }
+
+    // DELETE /api/organizations/{id}
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        orgService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // GET /api/organizations/{id}/members
+    @GetMapping("/{id}/members")
+    public ResponseEntity<List<OrgMemberDTO>> getMembers(@PathVariable UUID id) {
+        return ResponseEntity.ok(orgService.getMembers(id));
+    }
+
+    // POST /api/organizations/{id}/members
+    @PostMapping("/{id}/members")
+    public ResponseEntity<OrgMemberDTO> addMember(
+            @PathVariable UUID id,
+            @Valid @RequestBody AddMemberRequestDTO dto
+    ) {
+        OrgMemberDTO added = orgService.addMember(id, dto);
+        return ResponseEntity.status(201).body(added);
+    }
+
+    // PATCH /api/organizations/{id}/transfer-ownership/{memberId}
+    @PatchMapping("/{id}/transfer-ownership/{memberId}")
+    public ResponseEntity<OrgMemberDTO> transferOwnership(
+            @PathVariable UUID id,
+            @PathVariable UUID memberId
+    ) {
+        return ResponseEntity.ok(orgService.transferOwnership(id, memberId));
+    }
+
+    // DELETE /api/organizations/{id}/members/{memberId}
+    @DeleteMapping("/{id}/members/{memberId}")
+    public ResponseEntity<Void> removeMember(
+            @PathVariable UUID id,
+            @PathVariable UUID memberId
+    ) {
+        orgService.removeMember(id, memberId);
+        return ResponseEntity.noContent().build();
+    }
+}
