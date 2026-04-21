@@ -1,0 +1,19 @@
+
+volumes:
+  nti:
+
+services:
+  nti_db:
+    image: postgres:15
+    restart: always
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=nti_db
+    volumes:
+      - nti:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+
+
