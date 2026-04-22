@@ -12,6 +12,7 @@ import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
 import com.nti.nti_backend.organization.repository.OrgMemberRepository;
 import com.nti.nti_backend.organization.repository.OrganizationRepository;
+import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,17 @@ public class OrganizationService {
             throw new ConflictException(
               "Organization with ICO '" + dto.getIco() + "' already exists"
             );
+        }
+
+        User currentUser = getCurrentUser();
+        if (currentUser.hasRole(Role.FIRM)) {
+            boolean alreadyOwnsOne = memberRepository
+                    .findAllByUserId(currentUser.getId())
+                    .stream()
+                    .anyMatch(m -> m.getRole() == OrgMemberRole.OWNER);
+            if (alreadyOwnsOne) {
+                throw new ConflictException("A FIRM account can only register one organization");
+            }
         }
 
         Organization org = Organization.builder()
@@ -164,7 +176,7 @@ public class OrganizationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + orgId));
 
         Long currentUserId = getCurrentUser().getId();
-        boolean isAdmin = getCurrentUser().getRole().name().equals("ADMIN");
+        boolean isAdmin = getCurrentUser().hasRole(Role.ADMIN);
         if (!isAdmin) {
             OrgMember requestingMember = memberRepository
                     .findByOrganizationIdAndUserId(orgId,currentUserId)
@@ -222,12 +234,13 @@ public class OrganizationService {
         }
 
         Long currentUserId = getCurrentUser().getId();
+        boolean isAdmin = getCurrentUser().hasRole(Role.ADMIN);
         OrgMember requestingMember = memberRepository
                 .findByOrganizationIdAndUserId(orgId, currentUserId)
                 .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
 
-        if (requestingMember.getRole() != OrgMemberRole.OWNER) {
-            throw new ConflictException("Only the OWNER can remove members from this organization");
+        if (requestingMember.getRole() != OrgMemberRole.OWNER || !isAdmin) {
+            throw new ConflictException("Only the OWNER or ADMIN can remove members from this organization");
         }
 
         OrgMember memberToRemove = memberRepository.findById(memberId).orElseThrow(
@@ -254,7 +267,7 @@ public class OrganizationService {
         }
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.getRole().name().equals("ADMIN");
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
 
         if (!isAdmin) {
             throw new ConflictException("Only ADMIN can transfer organization ownership");

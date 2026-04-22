@@ -1,5 +1,6 @@
 package com.nti.nti_backend.milestone.entity;
 
+import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -23,8 +24,9 @@ public class Milestone {
     private UUID id;
 
 
-    @Column(name = "application_id")
-    private Long applicationId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "application_id")
+    private Application application;
 
     @Column(name = "mentorship_id")
     private UUID mentorshipId;

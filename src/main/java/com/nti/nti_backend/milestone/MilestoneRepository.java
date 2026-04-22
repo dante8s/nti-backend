@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface MilestoneRepository extends JpaRepository<Milestone, UUID> {
-    List<Milestone> findAllByApplicationId(Long applicationId);
+    List<Milestone> findAllByApplication_Id(Long applicationId);
 
     List<Milestone> findAllByMentorshipId(UUID mentorshipId);
 

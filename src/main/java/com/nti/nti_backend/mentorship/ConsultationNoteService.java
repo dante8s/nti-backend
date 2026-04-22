@@ -1,11 +1,14 @@
 package com.nti.nti_backend.mentorship;
 
+import com.nti.nti_backend.application.Application;
+import com.nti.nti_backend.application.ApplicationRepository;
 import com.nti.nti_backend.mentorship.dto.AddNoteRequestDTO;
 import com.nti.nti_backend.mentorship.dto.ConsultationNoteDTO;
 import com.nti.nti_backend.mentorship.entity.ConsultationNote;
 import com.nti.nti_backend.mentorship.repository.ConsultationNoteRepository;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
+import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,6 +23,7 @@ import java.util.UUID;
 public class ConsultationNoteService {
 
     private final ConsultationNoteRepository consultationNoteRepository;
+    private final ApplicationRepository applicationRepository;
 
     private User getCurrentUser() {
         return (User) SecurityContextHolder.getContext()
@@ -30,7 +34,7 @@ public class ConsultationNoteService {
     private ConsultationNoteDTO toDTO(ConsultationNote n) {
         return ConsultationNoteDTO.builder()
                 .id(n.getId())
-                .applicationId(n.getApplicationId())
+                .applicationId(n.getApplication().getId())
                 .content(n.getContent())
                 .createdById(n.getCreatedBy().getId())
                 .createdByName(n.getCreatedBy().getName())
@@ -44,12 +48,18 @@ public class ConsultationNoteService {
     public ConsultationNoteDTO create(AddNoteRequestDTO dto) {
         User currentUser = getCurrentUser();
 
-        if (!currentUser.getRole().name().equals("MENTOR")) {
+
+        if (!currentUser.hasRole(Role.MENTOR)) {
             throw new ConflictException("Only MENTOR can write consultation notes");
         }
 
+        Application application = applicationRepository.findById(dto.getApplicationId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Application with id: " + dto.getApplicationId() + " not found"
+                ));
+
         ConsultationNote note = ConsultationNote.builder()
-                .applicationId(dto.getApplicationId())
+                .application(application)
                 .content(dto.getContent())
                 .createdBy(currentUser)
                 .build();
@@ -61,7 +71,7 @@ public class ConsultationNoteService {
     @Transactional(readOnly = true)
     public List<ConsultationNoteDTO> getByApplication(Long applicationId) {
         return consultationNoteRepository
-                .findAllByApplicationIdOrderByCreatedAtDesc(applicationId)
+                .findAllByApplication_IdOrderByCreatedAtDesc(applicationId)
                 .stream()
                 .map(this::toDTO)
                 .toList();
