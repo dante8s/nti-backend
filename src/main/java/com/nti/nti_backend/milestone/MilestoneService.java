@@ -1,7 +1,7 @@
 package com.nti.nti_backend.milestone;
 
-import com.nti.nti_backend.config.SecurityConfig;
-import com.nti.nti_backend.mentorship.repository.MentorshipRepository;
+import com.nti.nti_backend.application.Application;
+import com.nti.nti_backend.application.ApplicationRepository;
 import com.nti.nti_backend.milestone.dto.ChangeStatusRequestDTO;
 import com.nti.nti_backend.milestone.dto.MilestoneRequestDTO;
 import com.nti.nti_backend.milestone.dto.MilestoneResponseDTO;
@@ -9,9 +9,9 @@ import com.nti.nti_backend.milestone.entity.Milestone;
 import com.nti.nti_backend.milestone.entity.MilestoneStatus;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
+import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +26,7 @@ public class MilestoneService {
 
     private final MilestoneRepository milestoneRepository;
     //private final MentorshipRepository mentorshipRepository;
+    private final ApplicationRepository applicationRepository;
 
     private static final Map<MilestoneStatus, Set<MilestoneStatus>> ALLOWED_TRANSITIONS =
             new EnumMap<>(MilestoneStatus.class);
@@ -76,7 +77,7 @@ public class MilestoneService {
     private MilestoneResponseDTO toResponseDTO(Milestone m) {
         return MilestoneResponseDTO.builder()
                 .id(m.getId())
-                .applicationId(m.getApplicationId())
+                .applicationId(m.getApplication() != null ?  m.getApplication().getId() : null)
                 .mentorshipId(m.getMentorshipId())
                 .title(m.getTitle())
                 .description(m.getDescription())
@@ -94,20 +95,28 @@ public class MilestoneService {
     @Transactional
     public MilestoneResponseDTO create(MilestoneRequestDTO dto) {
         User currentUser = getCurrentUser();
-        String role = currentUser.getRole().name();
-        boolean isAdmin = role.equals("ADMIN");
-        boolean isStudent = role.equals("STUDENT");
+
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
+        boolean isStudent = currentUser.hasRole(Role.STUDENT);
 
         if (!isAdmin && !isStudent) {
             throw new ConflictException("Only STUDENT or ADMIN can create milestones");
         }
 
+        Application application = null;
+        if (dto.getApplicationId() != null) {
+            application = applicationRepository.findById(dto.getApplicationId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Application not found: " + dto.getApplicationId()
+                    ));
+
+        }
         MilestoneStatus initialStatus = isAdmin ?
                 MilestoneStatus.PLANNED
                 : MilestoneStatus.PENDING_APPROVAL;
 
         Milestone milestone = Milestone.builder()
-                .applicationId(dto.getApplicationId())
+                .application(application)
                 .mentorshipId(dto.getMentorshipId())
                 .title(dto.getTitle())
                 .description(dto.getDescription())
@@ -129,7 +138,7 @@ public class MilestoneService {
         List<Milestone> results;
 
         if (applicationId != null) {
-            results = milestoneRepository.findAllByApplicationId(applicationId);
+            results = milestoneRepository.findAllByApplication_Id(applicationId);
         } else if (mentorshipId != null) {
             results = milestoneRepository.findAllByMentorshipId(mentorshipId);
         } else if (createdById != null) {
@@ -162,7 +171,7 @@ public class MilestoneService {
                 ));
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.getRole().name().equals("ADMIN");
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
         boolean isCreator = milestone.getCreatedBy().getId().equals(currentUser.getId());
 
         // Can't edit COMPLETED milestone
@@ -199,8 +208,8 @@ public class MilestoneService {
                 ));
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.getRole().name().equals("ADMIN");
-        boolean isMentor = currentUser.getRole().name().equals("MENTOR");
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
+        boolean isMentor = currentUser.hasRole(Role.MENTOR);
 
         if (!isAdmin && !isMentor) {
             throw new ConflictException(
@@ -223,8 +232,8 @@ public class MilestoneService {
 
         if (!allowed.contains(newStatus)) {
             throw new ConflictException(
-                    "Transition from " + effectiveCurrentStatus + " to " + newStatus + "" +
-                            "is not allowed"
+                    "Transition from " + effectiveCurrentStatus + " to " + newStatus +
+                            " is not allowed"
             );
         }
 

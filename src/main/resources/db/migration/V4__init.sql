@@ -1,13 +1,17 @@
-CREATE TABLE programs (
-                          id          BIGSERIAL    PRIMARY KEY,
-                          name        VARCHAR(255) NOT NULL,
-                          description TEXT,
-                          type        VARCHAR(20)  NOT NULL,
-                          is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
-                          created_at  TIMESTAMP    NOT NULL DEFAULT NOW()
+CREATE TABLE calls (
+                       id                  BIGSERIAL    PRIMARY KEY,
+                       title               VARCHAR(255) NOT NULL,
+                       program_id          BIGINT       NOT NULL
+                           REFERENCES programs(id),
+                       deadline            TIMESTAMP    NOT NULL,
+                       status              VARCHAR(20)  NOT NULL
+                           DEFAULT 'OPEN',
+                       evaluation_criteria TEXT,
+                       created_at          TIMESTAMP    NOT NULL
+                           DEFAULT NOW()
 );
 
-CREATE INDEX idx_programs_type
-    ON programs(type);
-CREATE INDEX idx_programs_active
-    ON programs(is_active);
+CREATE INDEX idx_calls_program_id
+    ON calls(program_id);
+CREATE INDEX idx_calls_status
+    ON calls(status);

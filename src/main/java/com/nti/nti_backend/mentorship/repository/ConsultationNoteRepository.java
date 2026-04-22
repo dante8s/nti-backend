@@ -11,5 +11,5 @@ import java.util.UUID;
 
 public interface ConsultationNoteRepository extends JpaRepository<ConsultationNote, UUID> {
 
-    List<ConsultationNote> findAllByApplicationIdOrderByCreatedAtDesc(Long applicationId);
+    List<ConsultationNote> findAllByApplication_IdOrderByCreatedAtDesc(Long applicationId);
 }

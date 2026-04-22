@@ -1,5 +1,6 @@
 package com.nti.nti_backend.mentorship.entity;
 
+import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -20,8 +21,9 @@ public class ConsultationNote {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "application_id",  nullable = false)
-    private Long applicationId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "application_id", nullable = false)
+    private Application application;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;

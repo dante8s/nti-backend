@@ -1,6 +1,8 @@
 package com.nti.nti_backend.mentorship;
 
 
+import com.nti.nti_backend.application.Application;
+import com.nti.nti_backend.application.ApplicationRepository;
 import com.nti.nti_backend.mentorship.dto.AssignMentorRequestDTO;
 import com.nti.nti_backend.mentorship.dto.MentorshipResponseDTO;
 import com.nti.nti_backend.mentorship.entity.Mentorship;
@@ -8,6 +10,7 @@ import com.nti.nti_backend.mentorship.entity.MentorshipStatus;
 import com.nti.nti_backend.mentorship.repository.MentorshipRepository;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
+import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,7 @@ public class MentorshipService {
 
     private final MentorshipRepository mentorshipRepository;
     private final UserRepository userRepository;
+    private final ApplicationRepository applicationRepository;
 
 
     private User getCurrentUser() {
@@ -44,15 +48,21 @@ public class MentorshipService {
                 "User not found with id: " + dto.getMentorUserId()
         ));
 
-        if (!mentor.getRole().name().equals("MENTOR")) {
+        if (!mentor.hasRole(Role.MENTOR)) {
             throw new ConflictException(
                     "User " + mentor.getEmail() + " does not have the MENTOR role"
             );
         }
 
+        Application application = null;
         if (dto.getApplicationId() != null) {
+            application = applicationRepository.findById(dto.getApplicationId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Application not found: " + dto.getApplicationId()
+                    ));
+
             boolean alreadyExists = mentorshipRepository
-                    .existsByMentorIdAndApplicationIdAndStatus(
+                    .existsByMentorIdAndApplication_IdAndStatus(
                             dto.getMentorUserId(),
                             dto.getApplicationId(),
                             MentorshipStatus.ACTIVE
@@ -66,12 +76,11 @@ public class MentorshipService {
 
         Mentorship mentorship = Mentorship.builder()
                 .mentor(mentor)
-                .applicationId(dto.getApplicationId())
+                .application(application)
                 .status(MentorshipStatus.ACTIVE)
                 .build();
 
-        mentorship = mentorshipRepository.save(mentorship);
-        return toResponseDTO(mentorship);
+        return toResponseDTO(mentorshipRepository.save(mentorship));
     }
 
     // GET my mentorships (mentor)
@@ -94,7 +103,7 @@ public class MentorshipService {
                 ));
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.getRole().name().equals("ADMIN");
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
         boolean isMentor = mentorship.getMentor().getId().equals(currentUser.getId());
 
         if (!isAdmin && !isMentor) {
@@ -121,7 +130,7 @@ public class MentorshipService {
         }
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.getRole().name().equals("ADMIN");
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
 
 
         if  (!isAdmin) {
@@ -144,7 +153,7 @@ public class MentorshipService {
                 .mentorUserId(m.getMentor().getId())
                 .mentorName(m.getMentor().getName())
                 .mentorEmail(m.getMentor().getEmail())
-                .applicationId(m.getApplicationId())
+                .applicationId(m.getApplication() != null ? m.getApplication().getId() : null)
                 .status(m.getStatus())
                 .startDate(m.getStartDate())
                 .endDate(m.getEndDate())

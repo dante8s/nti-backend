@@ -1,5 +1,6 @@
 package com.nti.nti_backend.mentorship.entity;
 
+import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -23,8 +24,9 @@ public class Mentorship {
     @JoinColumn(name = "mentor_user_id", nullable = false)
     private User mentor;
 
-    @Column(name = "application_id")
-    private Long applicationId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "application_id")
+    private Application application;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
