@@ -1,4 +1,4 @@
-package com.nti.nti_backend.public_.dto;
+package com.nti.nti_backend.organization.dto;
 
 import lombok.Builder;
 import lombok.Data;

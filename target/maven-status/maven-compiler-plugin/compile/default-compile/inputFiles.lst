@@ -35,6 +35,7 @@ C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nt
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\mentorship\dto\AssignMentorRequestDTO.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\mentorship\dto\ConsultationNoteDTO.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\mentorship\dto\MentorshipResponseDTO.java
+C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\mentorship\dto\PublicMentorDTO.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\mentorship\entity\ConsultationNote.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\mentorship\entity\Mentorship.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\mentorship\entity\MentorshipStatus.java
@@ -54,12 +55,12 @@ C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nt
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\dto\OrganizationRequestDTO.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\dto\OrganizationResponseDTO.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\dto\OrgMemberDTO.java
+C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\dto\PublicOrganizationDTO.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\entity\Organization.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\entity\OrgMember.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\entity\OrgMemberRole.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\entity\OrgStatus.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\exception\ConflictException.java
-C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\exception\GlobalExceptionHandler.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\exception\ResourceNotFoundException.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\OrganizationController.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\organization\OrganizationService.java
@@ -71,9 +72,6 @@ C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nt
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\program\ProgramRepository.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\program\ProgramService.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\program\ProgramType.java
-C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\public_\dto\PublicMentorDTO.java
-C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\public_\dto\PublicOrganizationDTO.java
-C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\public_\PublicController.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\recaptcha\RecaptchaService.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\user\AccountStatus.java
 C:\Users\thear\Documents\GitHub\project-nti\nti-backend\src\main\java\com\nti\nti_backend\user\Role.java

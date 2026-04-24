@@ -199,6 +199,19 @@ public class MilestoneService {
         return toResponseDTO(milestoneRepository.save(milestone));
     }
 
+    //  GET pending approval
+    @Transactional(readOnly = true)
+    public List<MilestoneResponseDTO> getPendingApproval() {
+        User currentUser = getCurrentUser();
+        if (!currentUser.hasRole(Role.ADMIN)) {
+            throw new ConflictException("Only ADMIN can view pending mielstones");
+        }
+        return milestoneRepository.findAllByStatus(MilestoneStatus.PENDING_APPROVAL)
+                .stream()
+                .map(this::toResponseDTO)
+                .toList();
+    }
+
     // CHANGE STATUS
     @Transactional
     public MilestoneResponseDTO changeStatus(UUID id, ChangeStatusRequestDTO dto) {
