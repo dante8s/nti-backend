@@ -10,6 +10,7 @@ import com.nti.nti_backend.mentorship.entity.MentorshipStatus;
 import com.nti.nti_backend.mentorship.repository.MentorshipRepository;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
+import com.nti.nti_backend.mentorship.dto.PublicMentorDTO;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
@@ -144,6 +145,26 @@ public class MentorshipService {
         return toResponseDTO(mentorship);
     }
 
+    @Transactional(readOnly = true)
+    public List<MentorshipResponseDTO> getAll() {
+        User currentUser = getCurrentUser();
+        if (!currentUser.hasRole(Role.ADMIN)) {
+            throw new ConflictException("Only ADMIN can view all mentorships");
+        }
+        return mentorshipRepository.findAll()
+                .stream()
+                .map(this::toResponseDTO)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorshipResponseDTO> getByApplication(Long applicationId) {
+        return mentorshipRepository.findAllByApplication_Id(applicationId)
+                .stream()
+                .map(this::toResponseDTO)
+                .toList();
+    }
+
     // Mapping
     private MentorshipResponseDTO toResponseDTO(
             Mentorship m
@@ -159,6 +180,16 @@ public class MentorshipService {
                 .endDate(m.getEndDate())
                 .createdAt(m.getCreatedAt())
                 .build();
+    }
+
+    public List<PublicMentorDTO> getPublicMentors() {
+        return userRepository.findAllByRole(Role.MENTOR)
+                .stream()
+                .map(u -> PublicMentorDTO.builder()
+                        .id(u.getId())
+                        .name(u.getName())
+                        .build()
+                ).toList();
     }
 
 }

@@ -1,9 +1,6 @@
 package com.nti.nti_backend.organization;
 
-import com.nti.nti_backend.organization.dto.AddMemberRequestDTO;
-import com.nti.nti_backend.organization.dto.OrgMemberDTO;
-import com.nti.nti_backend.organization.dto.OrganizationRequestDTO;
-import com.nti.nti_backend.organization.dto.OrganizationResponseDTO;
+import com.nti.nti_backend.organization.dto.*;
 import com.nti.nti_backend.organization.entity.OrgMember;
 import com.nti.nti_backend.organization.entity.OrgMemberRole;
 import com.nti.nti_backend.organization.entity.OrgStatus;
@@ -110,8 +107,8 @@ public class OrganizationService {
                 .findByOrganizationIdAndUserId(id, currentUserId)
                 .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
 
-        if (membership.getRole() == OrgMemberRole.MEMBER) {
-            throw new ConflictException("Only OWNER or ADMIN can edit this organization");
+        if (membership.getRole() != OrgMemberRole.OWNER) {
+            throw new ConflictException("Only OWNER can edit this organization");
         }
 
         if (!org.getIco().equals(dto.getIco()) && orgRepository.existsByIco(dto.getIco())) {
@@ -307,6 +304,35 @@ public class OrganizationService {
                 .role(newOwner.getRole())
                 .joinedAt(newOwner.getJoinedAt())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicOrganizationDTO> getPublicOrganizations() {
+        return orgRepository.findAllByStatus(OrgStatus.ACTIVE)
+                .stream()
+                .map(org -> PublicOrganizationDTO.builder()
+                        .id(org.getId())
+                        .name(org.getName())
+                        .sector(org.getSector())
+                        .website(org.getWebsite())
+                        .description(org.getDescription())
+                        .build()
+                ).toList();
+    }
+
+    @Transactional
+    public OrganizationResponseDTO changeStatus(UUID id, OrgStatus newStatus) {
+        User currentUser = getCurrentUser();
+        if (!currentUser.hasRole(Role.ADMIN)) {
+            throw new ConflictException("Only ADMIN can change organization status");
+        }
+
+        Organization org = orgRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Organization not found with id: " + id
+                ));
+        org.setStatus(newStatus);
+        return toResponseDTOSlim(orgRepository.save(org));
     }
 
     // Mapping
