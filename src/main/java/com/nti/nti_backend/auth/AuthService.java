@@ -29,7 +29,7 @@ public class AuthService {
 
     // Ролі які можна вибрати при реєстрації
     private static final Set<String> ALLOWED_ROLES =
-            Set.of("STUDENT", "FIRM");
+            Set.of("STUDENT", "FIRM", "MENTOR");
 
     // -----------------------------------------------
     // РЕЄСТРАЦІЯ
