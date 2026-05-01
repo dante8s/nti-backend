@@ -81,7 +81,8 @@ public class TeamService {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalStateException("Team not found"));
         User invitedUser = userRepository.findById(invitedUserId)
-                .orElseThrow(() -> new IllegalStateException("Invited user not found"));
+                .orElseThrow(() -> new IllegalStateException(
+                        "Користувача з id " + invitedUserId + " не існує в системі."));
 
         if (teamMemberRepository.existsByTeam_IdAndUser_Id(teamId, invitedUserId)) {
             throw new IllegalStateException("User is already invited or a member of this team");
@@ -108,10 +109,25 @@ public class TeamService {
 
     public TeamMember respondToInvitation(Long teamId, Long userId, boolean accepted) {
         TeamMember membership = teamMemberRepository.findByTeam_IdAndUser_Id(teamId, userId)
-                .orElseThrow(() -> new IllegalStateException("Invitation not found"));
+                .orElseThrow(() -> new IllegalStateException("Запрошення не знайдено"));
 
         if (membership.getInviteStatus() != TeamMember.InviteStatus.PENDING) {
-            throw new IllegalStateException("Invitation already responded to");
+            throw new IllegalStateException("На це запрошення вже відповіли");
+        }
+
+        // Перевірки тільки поки в БД ще PENDING — інакше flush може бачити цей рядок як ACCEPTED
+        // і existsByUser_IdAndInviteStatus хибно спрацює.
+        if (accepted) {
+            boolean alreadyAcceptedInAnotherTeam =
+                    teamMemberRepository.existsByUser_IdAndInviteStatus(userId, TeamMember.InviteStatus.ACCEPTED);
+            if (alreadyAcceptedInAnotherTeam) {
+                throw new IllegalStateException(
+                        "Ви вже підтверджені учасником іншої команди. Спочатку вийдіть з неї (через підтримку/адміна), щоб приєднатися до цієї.");
+            }
+            long currentSize = teamMemberRepository.countAcceptedMembers(teamId);
+            if (currentSize >= membership.getTeam().getMaxCapacity()) {
+                throw new IllegalStateException("У команді вже максимум учасників");
+            }
         }
 
         membership.setInviteStatus(
@@ -119,15 +135,6 @@ public class TeamService {
         membership.setRespondedAt(LocalDateTime.now());
 
         if (accepted) {
-            boolean alreadyAcceptedInAnotherTeam =
-                    teamMemberRepository.existsByUser_IdAndInviteStatus(userId, TeamMember.InviteStatus.ACCEPTED);
-            if (alreadyAcceptedInAnotherTeam) {
-                throw new IllegalStateException("User already belongs to another team");
-            }
-            long currentSize = teamMemberRepository.countAcceptedMembers(teamId);
-            if (currentSize >= membership.getTeam().getMaxCapacity()) {
-                throw new IllegalStateException("Team is already at maximum capacity");
-            }
             membership.setJoinedAt(LocalDateTime.now());
         }
 
@@ -136,7 +143,8 @@ public class TeamService {
 
     @Transactional(readOnly = true)
     public List<TeamMember> getPendingInvitesForUser(Long userId) {
-        return teamMemberRepository.findByUser_IdAndInviteStatus(userId, TeamMember.InviteStatus.PENDING);
+        return teamMemberRepository.findByUser_IdAndInviteStatusJoinTeamAndUser(
+                userId, TeamMember.InviteStatus.PENDING);
     }
 
     @Transactional(readOnly = true)

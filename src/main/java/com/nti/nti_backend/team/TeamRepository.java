@@ -21,7 +21,13 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
         """)
     List<Team> findAcceptedTeamsByUserId(@Param("userId") Long userId);
 
-    @Query("SELECT t FROM Team t LEFT JOIN FETCH t.members WHERE t.id = :id")
+    @Query("""
+            SELECT DISTINCT t FROM Team t
+            LEFT JOIN FETCH t.members m
+            LEFT JOIN FETCH m.user
+            LEFT JOIN FETCH t.leader
+            WHERE t.id = :id
+            """)
     Optional<Team> findByIdWithMembers(@Param("id") Long id);
 
     @Query("""

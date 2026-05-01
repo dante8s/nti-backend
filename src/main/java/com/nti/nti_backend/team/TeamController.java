@@ -9,6 +9,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/teams")
@@ -22,11 +23,12 @@ public class TeamController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<TeamResponse> createTeam(
+    public ResponseEntity<?> createTeam(
             @AuthenticationPrincipal User authUser,
             @RequestBody CreateTeamRequest request) {
         if (!canActForUser(authUser, request.leaderId())) {
-            return ResponseEntity.status(403).build();
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "Не можна створити команду від імені іншого користувача або без авторизації."));
         }
         try {
             Team team = new Team();
@@ -43,7 +45,7 @@ public class TeamController {
             Team full = teamService.getTeamWithMembers(saved.getId());
             return ResponseEntity.ok(toResponse(full));
         } catch (IllegalStateException e) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 
@@ -64,6 +66,22 @@ public class TeamController {
         }
     }
 
+    /** Declare before `/{teamId}` so `/invites/...` is not mistaken for team id (some setups). */
+    @GetMapping("/invites/{userId}")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<TeamMemberResponse>> getPendingInvites(
+            @AuthenticationPrincipal User authUser,
+            @PathVariable Long userId) {
+        if (!canActForUser(authUser, userId)) {
+            return ResponseEntity.status(403).build();
+        }
+        List<TeamMemberResponse> response = teamService.getPendingInvitesForUser(userId)
+                .stream()
+                .map(this::toMemberResponse)
+                .toList();
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{teamId}")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<TeamResponse> getTeam(
@@ -82,7 +100,7 @@ public class TeamController {
 
     @PostMapping("/{teamId}/invite")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<TeamMemberResponse> inviteMember(
+    public ResponseEntity<?> inviteMember(
             @AuthenticationPrincipal User authUser,
             @PathVariable Long teamId,
             @RequestParam Long userId
@@ -95,13 +113,13 @@ public class TeamController {
             TeamMember member = teamService.inviteMember(teamId, userId);
             return ResponseEntity.ok(toMemberResponse(member));
         } catch (IllegalStateException e) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 
     @PatchMapping("/{teamId}/respond")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<TeamMemberResponse> respondInvitation(
+    public ResponseEntity<?> respondInvitation(
             @AuthenticationPrincipal User authUser,
             @PathVariable Long teamId,
             @RequestParam Long userId,
@@ -114,23 +132,8 @@ public class TeamController {
             TeamMember member = teamService.respondToInvitation(teamId, userId, accepted);
             return ResponseEntity.ok(toMemberResponse(member));
         } catch (IllegalStateException e) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
-    }
-
-    @GetMapping("/invites/{userId}")
-    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<TeamMemberResponse>> getPendingInvites(
-            @AuthenticationPrincipal User authUser,
-            @PathVariable Long userId) {
-        if (!canActForUser(authUser, userId)) {
-            return ResponseEntity.status(403).build();
-        }
-        List<TeamMemberResponse> response = teamService.getPendingInvitesForUser(userId)
-                .stream()
-                .map(this::toMemberResponse)
-                .toList();
-        return ResponseEntity.ok(response);
     }
 
     private TeamResponse toResponse(Team team) {
@@ -151,12 +154,23 @@ public class TeamController {
     }
 
     private TeamMemberResponse toMemberResponse(TeamMember member) {
+        var user = member.getUser();
+        String displayName = "";
+        if (user != null) {
+            String name = user.getName();
+            displayName = (name != null && !name.isBlank())
+                    ? name
+                    : ("Користувач #" + user.getId());
+        } else {
+            displayName = "—";
+        }
         return new TeamMemberResponse(
                 member.getId(),
                 member.getTeam().getId(),
                 member.getUser().getId(),
                 member.getRole().name(),
-                member.getInviteStatus().name()
+                member.getInviteStatus().name(),
+                displayName
         );
     }
 
@@ -185,7 +199,8 @@ public class TeamController {
             Long teamId,
             Long userId,
             String role,
-            String inviteStatus
+            String inviteStatus,
+            String memberDisplayName
     ) {
     }
 

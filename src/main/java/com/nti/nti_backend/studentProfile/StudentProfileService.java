@@ -67,13 +67,19 @@ public class StudentProfileService {
         }
 
         String contentType = file.getContentType();
-        if (contentType == null || !contentType.equals("application/pdf")) {
+        String originalFileName = file.getOriginalFilename();
+        boolean hasPdfExtension =
+                originalFileName != null && originalFileName.toLowerCase().endsWith(".pdf");
+        boolean hasPdfMime =
+                "application/pdf".equalsIgnoreCase(contentType)
+                        || "application/octet-stream".equalsIgnoreCase(contentType);
+        if (!hasPdfExtension || !hasPdfMime) {
             throw new IllegalStateException("Only PDF files are accepted for CV");
         }
 
         StudentProfile profile = getProfileById(userId);
 
-        String filename = userId + "_" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
+        String filename = userId + "_" + System.currentTimeMillis() + "_" + originalFileName;
         Path targetPath = Paths.get(uploadDir).resolve(filename);
         Files.createDirectories(targetPath.getParent());
         Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);

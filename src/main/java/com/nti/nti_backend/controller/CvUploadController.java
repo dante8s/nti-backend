@@ -1,8 +1,13 @@
 package com.nti.nti_backend.controller;
 
+import com.nti.nti_backend.studentProfile.CallApplicationEligibility;
+import com.nti.nti_backend.studentProfile.ProfileSessionBrief;
 import com.nti.nti_backend.studentProfile.ProfileUpsertRequest;
 import com.nti.nti_backend.studentProfile.StudentProfile;
+import com.nti.nti_backend.studentProfile.StudentProfileRepository;
 import com.nti.nti_backend.studentProfile.StudentProfileService;
+import com.nti.nti_backend.team.TeamRepository;
+import com.nti.nti_backend.teamMember.TeamMemberRepository;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import org.springframework.core.io.Resource;
@@ -19,6 +24,10 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * CV Upload API — Week 3
@@ -33,12 +42,22 @@ import java.nio.file.Paths;
 @RequestMapping("/api/profile")
 public class CvUploadController {
     private final StudentProfileService studentProfileService;
+    private final TeamRepository teamRepository;
+    private final TeamMemberRepository teamMemberRepository;
+    private final StudentProfileRepository studentProfileRepository;
 
-    public CvUploadController (StudentProfileService studentProfileService) {
+    public CvUploadController(
+            StudentProfileService studentProfileService,
+            TeamRepository teamRepository,
+            TeamMemberRepository teamMemberRepository,
+            StudentProfileRepository studentProfileRepository) {
         this.studentProfileService = studentProfileService;
+        this.teamRepository = teamRepository;
+        this.teamMemberRepository = teamMemberRepository;
+        this.studentProfileRepository = studentProfileRepository;
     }
 
-    @GetMapping("/{userId}")
+    @GetMapping("/{userId:\\d+}")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<StudentProfile> getProfile(
             @AuthenticationPrincipal User authUser,
@@ -51,6 +70,81 @@ public class CvUploadController {
         } catch (IllegalStateException e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<StudentProfile> getMyProfile(
+            @AuthenticationPrincipal User authUser) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        try {
+            return ResponseEntity.ok(studentProfileService.getProfileById(authUser.getId()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /** Current user id and roles from JWT. */
+    @GetMapping("/me/session")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<ProfileSessionBrief> getMySessionBrief(
+            @AuthenticationPrincipal User authUser) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        Set<String> roleNames = authUser.getRoles().stream()
+                .map(Role::name)
+                .collect(Collectors.toSet());
+        return ResponseEntity.ok(new ProfileSessionBrief(
+                authUser.getId(),
+                authUser.getName(),
+                authUser.getEmail(),
+                roleNames,
+                authUser.getAccountStatus().name(),
+                authUser.isEmailVerified(),
+                authUser.isOnboardingCompleted()
+        ));
+    }
+
+    /**
+     * Чи користувач на своєму боці готовий переходити до заявки на виклик (профіль + команда).
+     * Не змінює модуль applications — лише підказка для UI.
+     */
+    @GetMapping("/me/call-application-eligibility")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<CallApplicationEligibility> getCallApplicationEligibility(
+            @AuthenticationPrincipal User authUser) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        boolean privileged = authUser.hasRole(Role.SUPER_ADMIN)
+                || authUser.hasRole(Role.ADMIN);
+        boolean teamLeader =
+                teamRepository.findByLeader_Id(authUser.getId()).isPresent();
+        boolean profileComplete =
+                studentProfileRepository.findByUser_Id(authUser.getId())
+                        .map(StudentProfile::isProfileComplete)
+                        .orElse(false);
+        boolean suggestsReady =
+                privileged || (teamLeader && profileComplete);
+        List<String> reminders = new ArrayList<>();
+        if (!privileged) {
+            if (!teamLeader) {
+                reminders.add(
+                        "Створіть команду й будьте її лідером (сторінка «Моя команда»).");
+            }
+            if (!profileComplete) {
+                reminders.add(
+                        "Завершіть студентський профіль і завантажте CV.");
+            }
+        }
+        return ResponseEntity.ok(new CallApplicationEligibility(
+                profileComplete,
+                teamLeader,
+                suggestsReady,
+                List.copyOf(reminders)));
     }
 
     @PostMapping
@@ -69,7 +163,23 @@ public class CvUploadController {
         }
     }
 
-    @PutMapping("/{userId}")
+    @PostMapping("/me")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<StudentProfile> createMyProfile(
+            @AuthenticationPrincipal User authUser,
+            @RequestBody ProfileUpsertRequest request) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        try {
+            StudentProfile profile = mapRequestToProfile(request, authUser.getId());
+            return ResponseEntity.ok(studentProfileService.createStudentProfile(profile));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PutMapping("/{userId:\\d+}")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<StudentProfile> updateProfile(
             @AuthenticationPrincipal User authUser,
@@ -87,11 +197,28 @@ public class CvUploadController {
         }
     }
 
+    @PutMapping("/me")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<StudentProfile> updateMyProfile(
+            @AuthenticationPrincipal User authUser,
+            @RequestBody ProfileUpsertRequest request
+    ) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        try {
+            StudentProfile updated = mapRequestToProfile(request, authUser.getId());
+            return ResponseEntity.ok(studentProfileService.editProfile(authUser.getId(), updated));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
     // ── POST /api/profile/{userId}/cv ─────────────────────────────────────────
     // Accepts a multipart PDF file.
     // Vue "Upload CV" button sends: Content-Type: multipart/form-data, field name: "file"
 
-    @PostMapping(value = "/{userId}/cv" , consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/{userId:\\d+}/cv" , consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<StudentProfile> uploadCv(
             @AuthenticationPrincipal User authUser,
@@ -127,7 +254,7 @@ public class CvUploadController {
     // ── GET /api/profile/{userId}/cv ──────────────────────────────────────────
     // Returns the PDF file as a downloadable/previewable response.
     // Vue profile page uses this to render the PDF preview iframe.
-    @GetMapping("/{userId}/cv")
+    @GetMapping("/{userId:\\d+}/cv")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Resource> downloadCv(
             @AuthenticationPrincipal User authUser,
@@ -165,7 +292,7 @@ public class CvUploadController {
     // ── DELETE /api/profile/{userId}/cv ──────────────────────────────────────
     // Removes the CV file from disk and clears the path in the profile.
     // Called when the student clicks "Remove CV" on their profile page.
-    @DeleteMapping("/{userId}/cv")
+    @DeleteMapping("/{userId:\\d+}/cv")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<StudentProfile> deleteCv(
             @AuthenticationPrincipal User authUser,
@@ -188,11 +315,46 @@ public class CvUploadController {
         return ResponseEntity.ok(saved);
     }
 
+    @PostMapping(value = "/me/cv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<StudentProfile> uploadMyCv(
+            @AuthenticationPrincipal User authUser,
+            @RequestPart("file") MultipartFile file) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        return uploadCv(authUser, authUser.getId(), file);
+    }
+
+    @GetMapping("/me/cv")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<Resource> downloadMyCv(
+            @AuthenticationPrincipal User authUser) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        return downloadCv(authUser, authUser.getId());
+    }
+
+    @DeleteMapping("/me/cv")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<StudentProfile> deleteMyCv(
+            @AuthenticationPrincipal User authUser) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        return deleteCv(authUser, authUser.getId());
+    }
+
     private StudentProfile mapRequestToProfile(ProfileUpsertRequest request) {
+        return mapRequestToProfile(request, request.getUserId());
+    }
+
+    private StudentProfile mapRequestToProfile(ProfileUpsertRequest request, Long userId) {
         StudentProfile profile = new StudentProfile();
 
         User user = new User();
-        user.setId(request.getUserId());
+        user.setId(userId);
         profile.setUser(user);
 
         profile.setStudyProgram(request.getStudyProgram());
@@ -206,10 +368,15 @@ public class CvUploadController {
     }
 
     private boolean canAccessUser(User authUser, Long targetUserId) {
-        return authUser != null && targetUserId != null && (
-                targetUserId.equals(authUser.getId())
-                        || authUser.hasRole(Role.ADMIN)
-                        || authUser.hasRole(Role.SUPER_ADMIN)
-        );
+        if (authUser == null || targetUserId == null) {
+            return false;
+        }
+        if (targetUserId.equals(authUser.getId())) {
+            return true;
+        }
+        if (authUser.hasRole(Role.ADMIN) || authUser.hasRole(Role.SUPER_ADMIN)) {
+            return true;
+        }
+        return teamMemberRepository.countAcceptedCoMembership(authUser.getId(), targetUserId) > 0;
     }
 }

@@ -1,5 +1,7 @@
 package com.nti.nti_backend.studentProfile;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.nti.nti_backend.user.User;
 import jakarta.persistence.*;
 
@@ -7,6 +9,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "student_profiles")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class StudentProfile {
 
     @Id
@@ -14,6 +17,8 @@ public class StudentProfile {
     private Long id;
 
     // ✅ removed duplicate @Column user_id — the @JoinColumn already creates user_id in DB
+    // Exclude from JSON: lazy User is a Hibernate proxy and breaks Jackson serialization.
+    @JsonIgnore
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;

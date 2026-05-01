@@ -32,7 +32,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
 
         // 🔓 1. Пропускаємо ТІЛЬКИ публічні маршрути
-        // Важливо: /api/auth/admin/** має проходити через JWT-фільтр
+        // Важливо: /api/auth/admin/** та /api/auth/me мають проходити через JWT-фільтр
         if (path.startsWith("/api/public")
                 || path.equals("/api/auth/register")
                 || path.equals("/api/auth/login")
