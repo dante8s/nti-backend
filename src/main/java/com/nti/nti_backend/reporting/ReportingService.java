@@ -1,7 +1,7 @@
 package com.nti.nti_backend.reporting;
 
-import com.nti.nti_backend.criteria.Criteria;
-import com.nti.nti_backend.criteria.CriteriaRepository;
+import com.nti.nti_backend.evaluation.Criteria;
+import com.nti.nti_backend.evaluation.CriteriaRepository;
 import com.nti.nti_backend.evaluation.Evaluation;
 import com.nti.nti_backend.evaluation.EvaluationRepository;
 import com.nti.nti_backend.studentProfile.StudentProfileRepository;

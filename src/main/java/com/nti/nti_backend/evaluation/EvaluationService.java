@@ -2,8 +2,6 @@ package com.nti.nti_backend.evaluation;
 
 import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.application.ApplicationRepository;
-import com.nti.nti_backend.criteria.Criteria;
-import com.nti.nti_backend.criteria.CriteriaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

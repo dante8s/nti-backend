@@ -1,5 +1,13 @@
 HELP.md
+
+# Build output (never commit)
 target/
+
+# Local-only Spring overrides (port, mail, secrets) — copy from application-local.properties.example
+**/application-local.properties
+
+# Accidental class files outside target
+*.class
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

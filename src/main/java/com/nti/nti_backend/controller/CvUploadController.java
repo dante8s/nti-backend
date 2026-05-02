@@ -127,7 +127,7 @@ public class CvUploadController {
                 studentProfileRepository.findByUser_Id(authUser.getId())
                         .map(StudentProfile::isProfileComplete)
                         .orElse(false);
-        boolean suggestsReady =
+        boolean suggestsReadyForCallFlow =
                 privileged || (teamLeader && profileComplete);
         List<String> reminders = new ArrayList<>();
         if (!privileged) {
@@ -143,7 +143,7 @@ public class CvUploadController {
         return ResponseEntity.ok(new CallApplicationEligibility(
                 profileComplete,
                 teamLeader,
-                suggestsReady,
+                suggestsReadyForCallFlow,
                 List.copyOf(reminders)));
     }
 

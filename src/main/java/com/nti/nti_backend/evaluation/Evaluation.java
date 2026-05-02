@@ -1,7 +1,6 @@
 package com.nti.nti_backend.evaluation;
 
 import com.nti.nti_backend.application.Application;
-import com.nti.nti_backend.criteria.Criteria;
 import com.nti.nti_backend.user.User;
 import jakarta.persistence.*;
 

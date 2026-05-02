@@ -1,8 +1,8 @@
 package com.nti.nti_backend.controller;
 
 import com.nti.nti_backend.application.ApplicationRepository;
-import com.nti.nti_backend.criteria.Criteria;
-import com.nti.nti_backend.criteria.CriteriaRepository;
+import com.nti.nti_backend.evaluation.Criteria;
+import com.nti.nti_backend.evaluation.CriteriaRepository;
 import com.nti.nti_backend.evaluation.Evaluation;
 import com.nti.nti_backend.evaluation.EvaluationService;
 import com.nti.nti_backend.user.Role;

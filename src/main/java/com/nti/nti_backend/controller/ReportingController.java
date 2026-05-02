@@ -1,6 +1,6 @@
 package com.nti.nti_backend.controller;
 
-import com.nti.nti_backend.criteria.CriteriaRepository;
+import com.nti.nti_backend.evaluation.CriteriaRepository;
 import com.nti.nti_backend.evaluation.EvaluationRepository;
 import com.nti.nti_backend.reporting.ReportingService;
 import com.nti.nti_backend.studentProfile.StudentProfileRepository;
