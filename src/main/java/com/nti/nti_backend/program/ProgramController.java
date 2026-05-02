@@ -1,10 +1,8 @@
 package com.nti.nti_backend.program;
 
-import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -49,25 +47,6 @@ public class ProgramController {
         return ResponseEntity.ok(
                 programService.create(dto)
         );
-    }
-
-    // FIRM submits Program B project
-    @PostMapping("/api/programs/submit-program-b")
-    @PreAuthorize("hasRole('FIRM')")
-    public ResponseEntity<ProgramDTO> submitProgramB(
-            @AuthenticationPrincipal User user,
-            @RequestBody ProgramDTO dto
-    ) {
-        ProgramDTO firmSubmission = new ProgramDTO(
-                null,
-                dto.name(),
-                dto.description(),
-                ProgramType.PROGRAM_B.name(),
-                false
-        );
-
-        return ResponseEntity.status(201)
-                .body(programService.create(firmSubmission));
     }
 
     @PutMapping("/api/admin/programs/{id}")
