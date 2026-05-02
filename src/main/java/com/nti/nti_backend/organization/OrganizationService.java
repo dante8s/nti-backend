@@ -1,5 +1,7 @@
 package com.nti.nti_backend.organization;
 
+import com.nti.nti_backend.auth.InviteOrgMemberRequest;
+import com.nti.nti_backend.email.EmailService;
 import com.nti.nti_backend.organization.dto.*;
 import com.nti.nti_backend.organization.entity.OrgMember;
 import com.nti.nti_backend.organization.entity.OrgMemberRole;
@@ -9,6 +11,7 @@ import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
 import com.nti.nti_backend.organization.repository.OrgMemberRepository;
 import com.nti.nti_backend.organization.repository.OrganizationRepository;
+import com.nti.nti_backend.user.AccountStatus;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
@@ -18,6 +21,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -27,6 +31,7 @@ public class OrganizationService {
     private final OrganizationRepository orgRepository;
     private final OrgMemberRepository memberRepository;
     private final UserRepository userRepository;
+    private final EmailService emailService;
 
     // get authenticated user from JWT
     private User getCurrentUser() {
@@ -212,6 +217,67 @@ public class OrganizationService {
                 .role(newMember.getRole())
                 .joinedAt(newMember.getJoinedAt())
                 .build();
+    }
+
+    @Transactional
+    public void inviteMember(UUID orgId, InviteOrgMemberRequest request) {
+        Organization org = orgRepository.findById(orgId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Organization not found with id: " + orgId
+                ));
+
+        User currentUser = getCurrentUser();
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
+
+        if (!isAdmin) {
+            OrgMember membership = memberRepository
+                    .findByOrganizationIdAndUserId(orgId, currentUser.getId())
+                    .orElseThrow(() -> new ConflictException(
+                            "You are not a member of this organization"
+                    ));
+            if (membership.getRole() != OrgMemberRole.OWNER) {
+                throw new ConflictException(
+                        "Only OWNER or ADMIN can invite members"
+                );
+            }
+        }
+        String email = request.email();
+        // Deny if user already exists and is a member
+        userRepository.findByEmail(email).ifPresent(existingUser -> {
+            if (memberRepository.existsByOrganizationIdAndUserId(orgId, existingUser.getId())) {
+                throw new ConflictException(
+                        "User " + email + " is already a member of this organization"
+                );
+            }
+        });
+
+        User invitedUser;
+        if (userRepository.existsByEmail(email)) {
+            invitedUser = userRepository.findByEmail(email).orElseThrow();
+        } else {
+            String inviteToken = UUID.randomUUID().toString();
+
+            invitedUser = User.builder()
+                    .email(email)
+                    .name("")
+                    .password("")
+                    .roles(Set.of(Role.FIRM_USER))
+                    .emailVerified(true)
+                    .enabled(false)
+                    .accountStatus(AccountStatus.PENDING)
+                    .inviteToken(inviteToken)
+                    .build();
+            invitedUser = userRepository.save(invitedUser);
+            emailService.sendOrgMemberInvite(email, org.getName(), inviteToken);
+        }
+
+        // Create org member
+        OrgMember member = OrgMember.builder()
+                .organization(org)
+                .user(invitedUser)
+                .role(OrgMemberRole.MEMBER)
+                .build();
+        member = memberRepository.save(member);
     }
 
     // GET my organization

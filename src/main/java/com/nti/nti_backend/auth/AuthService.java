@@ -146,6 +146,96 @@ public class AuthService {
     }
 
     // -----------------------------------------------
+    // ЗАПРОСИТИ МЕНТОРА (тільки SUPER_ADMIN або ADMIN)
+    // ----------------------------------------------
+    public void inviteMentor(String email) {
+        if (userRepository.existsByEmail(email)) {
+            throw new RuntimeException(
+                    "Користувач з таким email вже існує"
+            );
+        }
+
+        String inviteToken = UUID.randomUUID().toString();
+        User mentor = User.builder()
+                .email(email)
+                .name("")
+                .password("")
+                .roles(Set.of(Role.MENTOR))
+                .emailVerified(true) // mentors don't need to verify email
+                .enabled(false)
+                .accountStatus(AccountStatus.PENDING)
+                .inviteToken(inviteToken)
+                .build();
+
+        userRepository.save(mentor);
+        emailService.sendMentorInvite(email, inviteToken);
+    }
+
+    // -----------------------------------------------
+    // ЗАВЕРШЕННЯ РЕЄСТРАЦІЇ ПО ЗАПРОШЕННЮ
+    // -----------------------------------------------
+    public String completeInvite(CompleteInviteRequest request) {
+        User user = userRepository
+                .findByInviteToken(request.inviteToken())
+                .orElseThrow(() -> new RuntimeException(
+                        "Невірний або прострочений токен запрошення"
+                ));
+
+        if (request.name() == null || request.name().isBlank()) {
+            throw new RuntimeException("Name field is empty!");
+        }
+
+        if (request.password() == null || request.password().length() < 6) {
+            throw new RuntimeException("Minimal password length is 6 symbols");
+        }
+
+        user.setName(request.name());
+        user.setPassword(passwordEncoder.encode(request.password()));
+        user.setInviteToken(null);
+        userRepository.save(user);
+
+        // Send notification to admin to approve the user
+        try {
+            emailService.sendNewUserNotification(
+                    user.getName(),
+                    user.getEmail(),
+                    "MENTOR"
+            );
+        } catch (Exception e) {
+            System.out.println("Notification email failed");
+        }
+
+        return "Реєстрацію завершено. Очікуйте схвалення адміністратора.";
+    }
+
+    // -----------------------------------------------
+    // ЗАВЕРШЕННЯ РЕЄСТРАЦІЇ ЧЛЕНА ОРГАНІЗАЦІЇ
+    // -----------------------------------------------
+    public String completeOrgMemberInvite(CompleteOrgMemberInviteRequest request) {
+        User user = userRepository
+                .findByInviteToken(request.inviteToken())
+                .orElseThrow(() -> new RuntimeException(
+                        "Невірний або прострочений токен запрошення"
+                ));
+        if (request.name() == null || request.name().isBlank()) {
+            throw new RuntimeException("Name field is empty!");
+        }
+
+        if (request.password() == null || request.password().length() < 6) {
+            throw new RuntimeException("Password length is 6+ symbols");
+        }
+        user.setName(request.name());
+        user.setPassword(passwordEncoder.encode(request.password()));
+        user.setInviteToken(null);
+        user.setEnabled(true);
+        user.setAccountStatus(AccountStatus.APPROVED);
+        userRepository.save(user);
+
+        return "Реєстрацію завершено. Ви можете увійти в систему.";
+    }
+
+
+    // -----------------------------------------------
     // СХВАЛЕННЯ АКАУНТУ (тільки SUPER_ADMIN)
     // -----------------------------------------------
     public void approveUser(Long userId) {

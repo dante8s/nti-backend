@@ -25,4 +25,8 @@ public interface UserRepository
     // Find All Users with role
     @Query("SELECT u FROM User u JOIN u.roles r WHERE r = :role")
     List<User> findAllByRole(Role role);
+
+    // Invite Token
+    Optional<User> findByInviteToken(String inviteToken);
+    boolean existsByInviteToken(String inviteToken);
 }
