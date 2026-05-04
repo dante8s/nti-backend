@@ -302,7 +302,7 @@ public class OrganizationService {
                 .findByOrganizationIdAndUserId(orgId, currentUserId)
                 .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
 
-        if (requestingMember.getRole() != OrgMemberRole.OWNER || !isAdmin) {
+        if (requestingMember.getRole() != OrgMemberRole.OWNER && !isAdmin) {
             throw new ConflictException("Only the OWNER or ADMIN can remove members from this organization");
         }
 
