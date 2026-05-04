@@ -1,5 +1,6 @@
 package com.nti.nti_backend.organization;
 
+import com.nti.nti_backend.auth.InviteOrgMemberRequest;
 import com.nti.nti_backend.organization.dto.*;
 import com.nti.nti_backend.organization.entity.OrgStatus;
 import com.nti.nti_backend.organization.repository.OrganizationRepository;
@@ -78,6 +79,16 @@ public class OrganizationController {
     ) {
         OrgMemberDTO added = orgService.addMember(id, dto);
         return ResponseEntity.status(201).body(added);
+    }
+
+    // POST /api/organizations/{id}/invite-member
+    @PostMapping("/organizations/{id}/invite-member")
+    public ResponseEntity<Void> inviteMember(
+            @PathVariable UUID id,
+            @RequestBody InviteOrgMemberRequest request
+            ) {
+        orgService.inviteMember(id, request);
+        return ResponseEntity.ok().build();
     }
 
     // PATCH /api/organizations/{id}/transfer-ownership/{memberId}

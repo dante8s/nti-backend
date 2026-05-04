@@ -58,6 +58,31 @@ public class AuthController {
         authService.approveUser(id);
         return ResponseEntity.ok("Акаунт схвалено");
     }
+    
+    @PostMapping("/admin/invite-mentor")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<String> inviteMentor(
+            @RequestBody InviteMentorRequest request
+    ) {
+        authService.inviteMentor(request.email());
+        return ResponseEntity.ok("Запрошення надіслано на " + request.email());
+    }
+
+    @PostMapping("/complete-invite")
+    public ResponseEntity<String> completeInvite(
+            @RequestBody CompleteInviteRequest request
+    ) {
+        return ResponseEntity.ok(authService.completeInvite(request));
+    }
+
+    @PostMapping("/complete-org-invite")
+    public ResponseEntity<String> completeOrgMemberInvite(
+            @RequestBody CompleteOrgMemberInviteRequest request
+    ) {
+        return ResponseEntity.ok(
+                authService.completeOrgMemberInvite(request)
+        );
+    }
 
     @PostMapping("/admin/users/{id}/reject")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
