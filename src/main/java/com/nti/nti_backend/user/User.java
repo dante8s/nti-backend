@@ -50,6 +50,9 @@ public class User implements UserDetails {
     private boolean emailVerified = false;
     private String verificationToken;
 
+    // Invite token for mentor
+    private String inviteToken;
+
     // Скидання пароля
     private String resetPasswordToken;
     private LocalDateTime resetTokenExpiry;

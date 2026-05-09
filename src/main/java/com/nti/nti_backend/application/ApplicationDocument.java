@@ -19,8 +19,7 @@ public class ApplicationDocument {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "application_id",
-            nullable = false)
+    @JoinColumn(name = "application_id", nullable = false)
     private Application application;
 
     @Column(nullable = false)
@@ -30,7 +29,11 @@ public class ApplicationDocument {
     private String filePath;
 
     @Column(nullable = false)
-    private String fileType;
+    private String fileType; // PDF або DOCX
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private DocumentType documentType; // тип документу
 
     @CreationTimestamp
     private LocalDateTime uploadedAt;

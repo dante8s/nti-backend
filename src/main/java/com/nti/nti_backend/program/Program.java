@@ -1,8 +1,10 @@
 package com.nti.nti_backend.program;
 
+import com.nti.nti_backend.organization.entity.Organization;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -28,9 +30,24 @@ public class Program {
     @Column(nullable = false)
     private ProgramType type;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organization_id")
+    private Organization organization;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     @Builder.Default
-    private boolean isActive = true;
+    private ProgramStatus status = ProgramStatus.APPROVED;
+
+    @Column(columnDefinition = "TEXT")
+    private String adminComment;
+
+//    @Builder.Default
+//    private boolean isActive = true;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 }

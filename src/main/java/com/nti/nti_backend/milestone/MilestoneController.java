@@ -64,4 +64,10 @@ public class MilestoneController {
     ) {
         return ResponseEntity.ok(milestoneService.changeStatus(id, dto));
     }
+
+    // GET /api/milestones/pending-approval
+    @GetMapping("/pending-approval")
+    public ResponseEntity<List<MilestoneResponseDTO>> getPendingApproval() {
+        return ResponseEntity.ok(milestoneService.getPendingApproval());
+    }
 }

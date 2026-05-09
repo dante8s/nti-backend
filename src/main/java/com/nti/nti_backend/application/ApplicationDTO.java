@@ -10,6 +10,7 @@ public record ApplicationDTO(
         String programType,
         String status,
         String adminComment,
+        String formData,        // JSON-рядок з даними форми
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

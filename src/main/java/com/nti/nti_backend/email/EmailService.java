@@ -110,6 +110,39 @@ public class EmailService {
         );
     }
 
+    // Invite mentor
+    public void sendMentorInvite(String to, String token) {
+        String link = frontendUrl + "/complete-registration?token=" + token;
+        send(
+                to,
+                "NTI — Запрошення стати ментором",
+                "Вітаємо!\n\n"
+                        + "Адміністратор NTI запросив вас стати ментором.\n\n"
+                        + "Для завершення реєстрації перейдіть за посиланням:\n\n"
+                        + link + "\n\n"
+                        + "Вам потрібно буде вказати ваше ім'я та пароль.\n"
+                        + "Ваша роль вже встановлена як Ментор.\n\n"
+                        + "Посилання дійсне 7 днів.\n\n"
+                        + "Команда NTI"
+        );
+    }
+
+    public void sendOrgMemberInvite(String to, String orgName, String token) {
+        String link = frontendUrl + "/complete-org-invite?token=" + token;
+        send(
+                to,
+                "NTI — Запрошення до організації " + orgName,
+                "Вітаємо!\n\n"
+                        + "Вас запросили приєднатися до організації «" + orgName + "» на платформі NTI.\n\n"
+                        + "Для завершення реєстрації перейдіть за посиланням:\n\n"
+                        + link + "\n\n"
+                        + "Вам потрібно буде вказати ваше ім'я та пароль.\n"
+                        + "Ваш email та членство в організації вже встановлені.\n\n"
+                        + "Посилання дійсне 7 днів.\n\n"
+                        + "Команда NTI"
+        );
+    }
+
     // Схвалення акаунту
     public void sendAccountApproved(String to, String name) {
         send(
