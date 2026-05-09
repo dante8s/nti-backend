@@ -56,4 +56,12 @@ public class CallController {
         callService.close(id);
         return ResponseEntity.ok().build();
     }
+
+    // Get calls by Program
+    @GetMapping("/api/calls")
+    public ResponseEntity<List<CallDTO>> getAllByProgram(
+            @RequestParam Long programId
+    ) {
+        return ResponseEntity.ok(callService.getByProgram(programId));
+    }
 }

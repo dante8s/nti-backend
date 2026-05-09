@@ -1,5 +1,6 @@
 package com.nti.nti_backend.application;
 
+import com.nti.nti_backend.call.Call;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
@@ -17,4 +18,6 @@ public interface ApplicationRepository
     boolean existsByApplicantIdAndCallId(
             Long applicantId, Long callId
     );
+
+    Long call(Call call);
 }

@@ -3,9 +3,12 @@ package com.nti.nti_backend.application;
 import com.nti.nti_backend.call.Call;
 import com.nti.nti_backend.call.CallRepository;
 import com.nti.nti_backend.email.EmailService;
+import com.nti.nti_backend.program.ProgramType;
 import com.nti.nti_backend.user.User;
+import com.nti.nti_backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -16,6 +19,7 @@ public class ApplicationService {
 
     private final ApplicationRepository appRepository;
     private final CallRepository callRepository;
+    private final UserRepository userRepository;
     private final EmailService emailService;
 
     // Дозволені переходи між статусами
@@ -139,6 +143,33 @@ public class ApplicationService {
         return toDTO(saved);
     }
 
+    // set OWNER of the product
+    @Transactional
+    public ApplicationDTO setProductOwner(Long appId, Long userId, User currentUser) {
+        Application app = appRepository.findById(appId)
+                .orElseThrow(() -> new RuntimeException("Application not found"));
+        if (app.getStatus() != ApplicationStatus.APPROVED) {
+            throw new RuntimeException("Product owner can only be set on approved applications");
+        }
+        // only program b
+        if (app.getCall().getProgram().getType() != ProgramType.PROGRAM_B) {
+            throw new RuntimeException(" program owner can only be set on Program B applications");
+        }
+
+        User productOwner = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        app.setProductOwner(productOwner);
+        return toDTO(appRepository.save(app));
+    }
+
+    public List<ApplicationDTO> getByCall(Long callId) {
+        return appRepository.findByCallId(callId)
+                .stream()
+                .map(this::toDTO)
+                .toList();
+    }
+
     // Валідація переходу між статусами
     private void validateTransition(
             ApplicationStatus current,
@@ -165,6 +196,7 @@ public class ApplicationService {
         }
         return app;
     }
+
 
     private ApplicationDTO toDTO(Application a) {
         return new ApplicationDTO(

@@ -29,6 +29,10 @@ public class Application {
     @JoinColumn(name = "applicant_id", nullable = false)
     private User applicant;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_owner_id")
+    private User productOwner;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private ApplicationStatus status =
