@@ -32,9 +32,9 @@ public class ScoringController {
         this.applicationRepository = applicationRepository;
     }
 
-    // POST /api/evaluations/score  — submit or update one score
+    // POST /api/evaluations/score  — submit or update one score (лише SUPER_EVALUATOR / адміни)
     @PostMapping("/score")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Evaluation> submitScore(
             @AuthenticationPrincipal User authUser,
             @RequestBody Evaluation evaluation ) {
@@ -52,7 +52,7 @@ public class ScoringController {
 
     // GET  /api/evaluations/{appId}/scores — get all scores for one application
     @GetMapping("/{appId}/scores")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<Evaluation>> getScores(@PathVariable Long appId) {
         List<Evaluation> scores = evaluationService.getAllScoresForApplication(appId);
         return ResponseEntity.ok(scores);
@@ -61,7 +61,7 @@ public class ScoringController {
     // ── Get pre-filled scores for one evaluator ───────────────────────────────
     // Called when a commission member reopens the evaluation form — pre-fills their previous scores.
     @GetMapping("/{appId}/mine")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<Evaluation>> getMyScores (
         @AuthenticationPrincipal User authUser,
         @PathVariable Long appId ,
@@ -78,7 +78,7 @@ public class ScoringController {
     // The key scoring endpoint — returns the weighted average score for one application.
     // Formula: SUM(score × weightPercent) / SUM(weightPercent)
     @GetMapping("/{appId}/average")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Map<String , Object>> getAverage(@PathVariable Long appId) {
         Double weightedAvg = evaluationService.getWeightedAverageScore(appId);
         Double simpleAvg = evaluationService.getAverageScore(appId);
@@ -95,7 +95,7 @@ public class ScoringController {
     // Returns true when the evaluator has scored every criterion for this application.
     // Vue uses this to show the green "complete" badge and enable the Submit button.
     @GetMapping("/{appId}/complete")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Map<String , Object>> isComplete(
             @AuthenticationPrincipal User authUser,
             @PathVariable Long appId ,
@@ -126,7 +126,7 @@ public class ScoringController {
     // ── Get criteria list for a call ─────────────────────────────────────────
     // Vue evaluation form loads this first to render one input per criterion.
     @GetMapping("/criteria/{callId}")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<Criteria>> getCriteriaList(@PathVariable Long callId) {
         List<Criteria> criteria = criteriaRepository.findByCall_IdOrderBySortOrderAsc(callId);
         return ResponseEntity.ok(criteria);
@@ -134,7 +134,7 @@ public class ScoringController {
 
     // ── Commission queue for a call ───────────────────────────────────────────
     @GetMapping("/calls/{callId}/applications")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<Map<String, Object>>> getCallApplications(@PathVariable Long callId) {
         List<Map<String, Object>> queue = applicationRepository.findByCallId(callId)
                 .stream()
@@ -143,6 +143,11 @@ public class ScoringController {
                     row.put("id", app.getId());
                     row.put("status", app.getStatus() != null ? app.getStatus().name() : null);
                     row.put("applicantId", app.getApplicant() != null ? app.getApplicant().getId() : null);
+                    String programName = null;
+                    if (app.getCall() != null && app.getCall().getProgram() != null) {
+                        programName = app.getCall().getProgram().getName();
+                    }
+                    row.put("programName", programName);
                     return row;
                 })
                 .toList();
@@ -156,5 +161,4 @@ public class ScoringController {
                         || authUser.hasRole(Role.SUPER_ADMIN)
         );
     }
-
 }

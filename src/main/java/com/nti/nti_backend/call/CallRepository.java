@@ -13,4 +13,6 @@ public interface CallRepository
     );
 
     List<Call> findByStatus(CallStatus status);
+
+    long countByStatus(CallStatus status);
 }

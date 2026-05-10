@@ -5,6 +5,7 @@ import com.nti.nti_backend.call.Call;
 import com.nti.nti_backend.call.CallRepository;
 import com.nti.nti_backend.email.EmailService;
 import com.nti.nti_backend.program.ProgramType;
+import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -276,6 +277,32 @@ public class ApplicationService {
                         new RuntimeException("Заявку не знайдено")
                 )
         );
+    }
+
+    /**
+     * Перегляд заявки з перевіркою прав: студент — лише своя; комісія та адмін — будь-яка.
+     */
+    public ApplicationDTO getByIdForViewer(Long id, User viewer) {
+        Application app = appRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+        if (viewer == null || !canViewApplication(viewer, app)) {
+            throw new RuntimeException("Немає доступу");
+        }
+        return toDTO(app);
+    }
+
+    private boolean canViewApplication(User viewer, Application app) {
+        if (viewer.hasRole(Role.ADMIN) || viewer.hasRole(Role.SUPER_ADMIN)) {
+            return true;
+        }
+        if (viewer.hasRole(Role.EVALUATOR) || viewer.hasRole(Role.SUPER_EVALUATOR)) {
+            return true;
+        }
+        if (viewer.hasRole(Role.MENTOR)) {
+            return true;
+        }
+        return viewer.hasRole(Role.STUDENT)
+                && app.getApplicant().getId().equals(viewer.getId());
     }
 
     // Тільки не-чернетки для адміна

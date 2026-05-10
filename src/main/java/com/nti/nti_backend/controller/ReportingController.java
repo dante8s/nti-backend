@@ -5,14 +5,17 @@ import com.nti.nti_backend.evaluation.EvaluationRepository;
 import com.nti.nti_backend.reporting.ReportingService;
 import com.nti.nti_backend.studentProfile.StudentProfileRepository;
 import com.nti.nti_backend.team.TeamRepository;
+import com.nti.nti_backend.user.User;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -51,7 +54,7 @@ public class ReportingController {
     // Returns the XLSX file as a binary download — browser prompts "Save As".
 
     @GetMapping("/export/{callId}")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<byte[]> exportEvaluatorReport(@PathVariable Long callId) {
         try {
             byte[] xlsx = reportingService.generateEvaluationReport(callId);
@@ -76,12 +79,70 @@ public class ReportingController {
     // ── GET /api/reporting/stats ──────────────────────────────────────────────
     // Vue "адмін дашборд" calls this on page load to populate the stat cards.
     @GetMapping("/stats")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
     public ResponseEntity<Map<String , Object>> getAdminStats() {
         Map<String , Object> stats = reportingService.getAdminStats();
         return ResponseEntity.ok(stats);
     }
 
+    @GetMapping("/dashboard/student")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
+    public ResponseEntity<Map<String, Object>> studentDashboard(
+            @AuthenticationPrincipal User authUser) {
+        if (authUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(reportingService.getStudentDashboard(authUser.getId()));
+    }
+
+    @GetMapping("/dashboard/firm")
+    @PreAuthorize("hasAnyRole('FIRM','FIRM_USER','ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
+    public ResponseEntity<Map<String, Object>> firmDashboard(
+            @AuthenticationPrincipal User authUser) {
+        if (authUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(reportingService.getFirmDashboard(authUser.getId()));
+    }
+
+    /**
+     * Експорт списку заявок за фільтром: CSV, XLSX, PDF, DOCX.
+     */
+    @GetMapping("/export")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','SUPER_EVALUATOR','EVALUATOR')")
+    public ResponseEntity<byte[]> exportApplications(
+            @RequestParam String format,
+            @RequestParam(required = false) Long callId,
+            @RequestParam(required = false) String program,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String role) {
+        try {
+            byte[] body = reportingService.exportApplicationsReport(
+                    format, callId, program, status, role);
+            String ext = format == null ? "bin" : format.trim().toLowerCase();
+            MediaType mediaType = switch (ext) {
+                case "csv" -> MediaType.parseMediaType("text/csv; charset=UTF-8");
+                case "xlsx" -> MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                case "pdf" -> MediaType.APPLICATION_PDF;
+                case "docx" -> MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+                default -> MediaType.APPLICATION_OCTET_STREAM;
+            };
+            String filename = "nti_applications_export_"
+                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm"))
+                    + "." + ext;
+            return ResponseEntity.ok()
+                    .contentType(mediaType)
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + filename + "\"")
+                    .body(body);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 
     // ── GET /api/reporting/pr-check/{callId} ──────────────────────────────────
     // "Pull Request → review" from your task card.
@@ -101,7 +162,7 @@ public class ReportingController {
     // If all checks pass → status 200. If any fail → status 422 (Unprocessable Entity).
 
     @GetMapping("/pr-check/{callId}")
-    @PreAuthorize("hasAnyRole('EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Map<String , Object>> prReadinessCheck(@PathVariable Long callId) {
         List<Map<String , Object>> checks = new ArrayList<>();
         boolean allPassed = true;

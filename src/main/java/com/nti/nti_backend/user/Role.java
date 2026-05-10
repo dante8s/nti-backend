@@ -6,6 +6,7 @@ public enum Role {
     FIRM_USER,
     MENTOR,
     EVALUATOR,
+    SUPER_EVALUATOR,
     ADMIN,
     SUPER_ADMIN
 }

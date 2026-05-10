@@ -50,11 +50,11 @@ public class TeamController {
     }
 
     @GetMapping("/user/{userId}")
-    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
     public ResponseEntity<TeamResponse> getTeamForUser(
             @AuthenticationPrincipal User authUser,
             @PathVariable Long userId) {
-        if (!canActForUser(authUser, userId)) {
+        if (!canActForUser(authUser, userId) && !isCommissionViewer(authUser)) {
             return ResponseEntity.status(403).build();
         }
         try {
@@ -83,13 +83,14 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}")
-    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
     public ResponseEntity<TeamResponse> getTeam(
             @AuthenticationPrincipal User authUser,
             @PathVariable Long teamId) {
         try {
             Team team = teamService.getTeamWithMembers(teamId);
-            if (!isAdmin(authUser) && !isMemberOfTeam(team, authUser.getId())) {
+            if (!isAdmin(authUser) && !isMemberOfTeam(team, authUser.getId())
+                    && !isCommissionViewer(authUser)) {
                 return ResponseEntity.status(403).build();
             }
             return ResponseEntity.ok(toResponse(team));
@@ -214,6 +215,13 @@ public class TeamController {
         return authUser != null && (
                 authUser.hasRole(Role.ADMIN)
                         || authUser.hasRole(Role.SUPER_ADMIN)
+        );
+    }
+
+    private boolean isCommissionViewer(User authUser) {
+        return authUser != null && (
+                authUser.hasRole(Role.EVALUATOR)
+                        || authUser.hasRole(Role.SUPER_EVALUATOR)
         );
     }
 

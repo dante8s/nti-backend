@@ -58,7 +58,7 @@ public class CvUploadController {
     }
 
     @GetMapping("/{userId:\\d+}")
-    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
     public ResponseEntity<StudentProfile> getProfile(
             @AuthenticationPrincipal User authUser,
             @PathVariable Long userId) {
@@ -88,7 +88,9 @@ public class CvUploadController {
 
     /** Current user id and roles from JWT. */
     @GetMapping("/me/session")
-    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize(
+            "hasAnyRole('STUDENT','MENTOR','FIRM','FIRM_USER','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')"
+    )
     public ResponseEntity<ProfileSessionBrief> getMySessionBrief(
             @AuthenticationPrincipal User authUser) {
         if (authUser == null || authUser.getId() == null) {
@@ -255,7 +257,7 @@ public class CvUploadController {
     // Returns the PDF file as a downloadable/previewable response.
     // Vue profile page uses this to render the PDF preview iframe.
     @GetMapping("/{userId:\\d+}/cv")
-    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
     public ResponseEntity<Resource> downloadCv(
             @AuthenticationPrincipal User authUser,
             @PathVariable Long userId) {
@@ -375,6 +377,9 @@ public class CvUploadController {
             return true;
         }
         if (authUser.hasRole(Role.ADMIN) || authUser.hasRole(Role.SUPER_ADMIN)) {
+            return true;
+        }
+        if (authUser.hasRole(Role.EVALUATOR) || authUser.hasRole(Role.SUPER_EVALUATOR)) {
             return true;
         }
         return teamMemberRepository.countAcceptedCoMembership(authUser.getId(), targetUserId) > 0;
