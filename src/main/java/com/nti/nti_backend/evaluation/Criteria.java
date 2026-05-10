@@ -1,5 +1,6 @@
 package com.nti.nti_backend.evaluation;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.nti.nti_backend.call.Call;
 import jakarta.persistence.*;
 
@@ -34,6 +35,7 @@ public class Criteria {
         return id;
     }
 
+    @JsonIgnore
     public Call getCall() {
         return call;
     }

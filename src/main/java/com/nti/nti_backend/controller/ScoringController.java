@@ -1,6 +1,7 @@
 package com.nti.nti_backend.controller;
 
 import com.nti.nti_backend.application.ApplicationRepository;
+import com.nti.nti_backend.evaluation.CommissionCriteriaDefaultSeeder;
 import com.nti.nti_backend.evaluation.Criteria;
 import com.nti.nti_backend.evaluation.CriteriaRepository;
 import com.nti.nti_backend.evaluation.Evaluation;
@@ -23,13 +24,16 @@ public class ScoringController {
     private final EvaluationService evaluationService;
     private final CriteriaRepository criteriaRepository;
     private final ApplicationRepository applicationRepository;
+    private final CommissionCriteriaDefaultSeeder commissionCriteriaDefaultSeeder;
 
     public ScoringController(EvaluationService evaluationService,
                              CriteriaRepository criteriaRepository,
-                             ApplicationRepository applicationRepository) {
+                             ApplicationRepository applicationRepository,
+                             CommissionCriteriaDefaultSeeder commissionCriteriaDefaultSeeder) {
         this.evaluationService = evaluationService;
         this.criteriaRepository = criteriaRepository;
         this.applicationRepository = applicationRepository;
+        this.commissionCriteriaDefaultSeeder = commissionCriteriaDefaultSeeder;
     }
 
     // POST /api/evaluations/score  — submit or update one score (лише SUPER_EVALUATOR / адміни)
@@ -128,7 +132,8 @@ public class ScoringController {
     @GetMapping("/criteria/{callId}")
     @PreAuthorize("hasAnyRole('EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<Criteria>> getCriteriaList(@PathVariable Long callId) {
-        List<Criteria> criteria = criteriaRepository.findByCall_IdOrderBySortOrderAsc(callId);
+        List<Criteria> criteria =
+                commissionCriteriaDefaultSeeder.listForCallEnsuringDefaults(callId);
         return ResponseEntity.ok(criteria);
     }
 

@@ -8,8 +8,17 @@ import com.nti.nti_backend.program.ProgramType;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
+import java.net.MalformedURLException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,6 +28,13 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class ApplicationService {
+
+    /** Віддача файлу документа заявки (перегляд / завантаження). */
+    public record ServedApplicationDocument(
+            Resource resource,
+            MediaType contentType,
+            String filename
+    ) {}
 
     private final ApplicationRepository appRepository;
     private final CallRepository callRepository;
@@ -223,12 +239,14 @@ public class ApplicationService {
     }
 
     // Статус документів
-    public List<DocumentStatusDTO> getDocumentStatus(
-            Long appId) {
+    public List<DocumentStatusDTO> getDocumentStatus(Long appId, User viewer) {
         Application app = appRepository.findById(appId)
                 .orElseThrow(() ->
                         new RuntimeException("Заявку не знайдено")
                 );
+        if (viewer == null || !canViewApplication(viewer, app)) {
+            throw new RuntimeException("Немає доступу");
+        }
 
         ProgramType programType =
                 app.getCall().getProgram().getType();
@@ -260,6 +278,67 @@ public class ApplicationService {
                                 : null
                 ))
                 .toList();
+    }
+
+    /**
+     * Файл обов'язкового документа для перегляду/завантаження (з диска).
+     */
+    public ServedApplicationDocument serveApplicationDocument(
+            Long applicationId,
+            DocumentType documentType,
+            User viewer
+    ) {
+        Application app = appRepository.findById(applicationId)
+                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+        if (viewer == null || !canViewApplication(viewer, app)) {
+            throw new RuntimeException("Немає доступу");
+        }
+        ApplicationDocument doc = documentRepository
+                .findByApplicationIdAndDocumentType(applicationId, documentType)
+                .orElseThrow(() -> new RuntimeException("Документ не знайдено"));
+        Path path = Paths.get(doc.getFilePath()).normalize();
+        if (!Files.exists(path) || !Files.isRegularFile(path)) {
+            throw new RuntimeException("Файл на диску не знайдено");
+        }
+        try {
+            Resource resource = new UrlResource(path.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                throw new RuntimeException("Файл недоступний для читання");
+            }
+            MediaType ct = resolveDocumentMediaType(doc);
+            String name = doc.getFileName() != null ? doc.getFileName()
+                    : documentType.name().toLowerCase() + "." + extensionFor(doc.getFileType());
+            return new ServedApplicationDocument(resource, ct, name);
+        } catch (MalformedURLException e) {
+            throw new RuntimeException("Некоректний шлях до файлу", e);
+        }
+    }
+
+    public static String contentDispositionAttachment(String filename) {
+        String enc = URLEncoder.encode(filename, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        return "attachment; filename*=UTF-8''" + enc;
+    }
+
+    public static String contentDispositionInline(String filename) {
+        String enc = URLEncoder.encode(filename, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        return "inline; filename*=UTF-8''" + enc;
+    }
+
+    private static MediaType resolveDocumentMediaType(ApplicationDocument doc) {
+        if (doc.getFileType() != null && doc.getFileType().equalsIgnoreCase("DOCX")) {
+            return MediaType.parseMediaType(
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        }
+        return MediaType.APPLICATION_PDF;
+    }
+
+    private static String extensionFor(String fileType) {
+        if (fileType != null && fileType.equalsIgnoreCase("DOCX")) {
+            return "docx";
+        }
+        return "pdf";
     }
 
     public List<ApplicationDTO> getMyApplications(

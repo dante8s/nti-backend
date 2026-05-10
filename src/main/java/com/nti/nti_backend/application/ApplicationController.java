@@ -1,6 +1,5 @@
 package com.nti.nti_backend.application;
 
-import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,8 +22,6 @@ import java.util.UUID;
 public class ApplicationController {
 
     private final ApplicationService appService;
-    private final DocumentRepository documentRepository;
-    private final AuditService auditService;
 
     // Створити draft
     @PostMapping("/applications")
@@ -102,14 +99,6 @@ public class ApplicationController {
             }
             throw e;
         }
-    }
-
-    // Статус документів заявки
-    @GetMapping("/applications/{id}/documents/status")
-    @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<List<DocumentStatusDTO>> getDocumentStatus(
-            @PathVariable Long id) {
-        return ResponseEntity.ok(appService.getDocumentStatus(id));
     }
 
     // Upload документу

@@ -46,8 +46,9 @@ public class EvaluationService {
                     "Criteria does not belong to application's call");
         }
 
-        if (evaluation.getScore() < 0 || evaluation.getScore() > criteria.getMaxScore()) {
-            throw new IllegalStateException("The score must be between 0 to " + criteria.getMaxScore());
+        // Оцінювання в кабінеті комісії: шкала 1–100 (незалежно від max_score у критерії як довідкового поля).
+        if (evaluation.getScore() < 1 || evaluation.getScore() > 100) {
+            throw new IllegalStateException("The score must be between 1 and 100");
         }
 
         return evaluationRepository
