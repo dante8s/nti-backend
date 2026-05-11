@@ -19,5 +19,5 @@ public interface ApplicationRepository
             Long applicantId, Long callId
     );
 
-    Long call(Call call);
+
 }

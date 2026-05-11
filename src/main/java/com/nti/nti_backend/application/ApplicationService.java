@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -100,6 +101,7 @@ public class ApplicationService {
     }
 
     // Одна заявка
+    @Transactional
     public ApplicationDTO getById(Long id) {
         return toDTO(appRepository.findById(id)
                 .orElseThrow(() ->
@@ -109,6 +111,7 @@ public class ApplicationService {
     }
 
     // Всі заявки (ADMIN)
+    @Transactional
     public List<ApplicationDTO> getAll() {
         return appRepository.findAll()
                 .stream()
@@ -199,6 +202,22 @@ public class ApplicationService {
 
 
     private ApplicationDTO toDTO(Application a) {
+        boolean isProgramB = a.getCall().getProgram().getType()
+                == ProgramType.PROGRAM_B;
+        UUID organizationId = null;
+        String organizationName = null;
+
+        if (isProgramB && a.getCall().getProgram().getOrganization() != null) {
+            organizationId = a.getCall().getProgram().getOrganization().getId();
+            organizationName = a.getCall().getProgram().getOrganization().getName();
+        }
+        Long productOwnerId = null;
+        String productOwnerName = null;
+        if (a.getProductOwner() != null) {
+            productOwnerId = a.getProductOwner().getId();
+            productOwnerName = a.getProductOwner().getName();
+        }
+
         return new ApplicationDTO(
                 a.getId(),
                 a.getCall().getId(),
@@ -207,6 +226,10 @@ public class ApplicationService {
                 a.getCall().getProgram().getType().name(),
                 a.getStatus().name(),
                 a.getAdminComment(),
+                organizationId,
+                organizationName,
+                productOwnerId,
+                productOwnerName,
                 a.getCreatedAt(),
                 a.getUpdatedAt()
         );

@@ -82,7 +82,7 @@ public class ApplicationController {
 
     // Add product owner
     @PatchMapping("/applications/{id}/product-owner")
-    @PreAuthorize("hasRole('FIRM')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<ApplicationDTO> setProductOwner(
             @PathVariable Long id,
             @RequestParam Long userId,
