@@ -35,11 +35,17 @@ public class Application {
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
-    private ApplicationStatus status =
-            ApplicationStatus.DRAFT;
+    private ApplicationStatus status = ApplicationStatus.DRAFT;
 
     @Column(columnDefinition = "TEXT")
     private String adminComment;
+
+    /**
+     * Довільні дані форми у форматі JSON.
+     * Зберігається як текст, щоб не прив'язуватись до схеми.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String formData;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
