@@ -7,11 +7,13 @@ import com.nti.nti_backend.email.EmailService;
 import com.nti.nti_backend.program.ProgramType;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
+import com.nti.nti_backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.net.MalformedURLException;
 import java.net.URLEncoder;
@@ -21,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -38,6 +41,7 @@ public class ApplicationService {
 
     private final ApplicationRepository appRepository;
     private final CallRepository callRepository;
+    private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
     private final EmailService emailService;
     private final AuditService auditService;
@@ -350,6 +354,8 @@ public class ApplicationService {
                 .toList();
     }
 
+    // Одна заявка
+    @Transactional
     public ApplicationDTO getById(Long id) {
         return toDTO(appRepository.findById(id)
                 .orElseThrow(() ->
@@ -358,6 +364,8 @@ public class ApplicationService {
         );
     }
 
+    // Всі заявки (ADMIN)
+    @Transactional
     /**
      * Перегляд заявки з перевіркою прав: студент — лише своя; комісія та адмін — будь-яка.
      */
@@ -432,6 +440,34 @@ public class ApplicationService {
         return toDTO(saved);
     }
 
+    // set OWNER of the product
+    @Transactional
+    public ApplicationDTO setProductOwner(Long appId, Long userId, User currentUser) {
+        Application app = appRepository.findById(appId)
+                .orElseThrow(() -> new RuntimeException("Application not found"));
+        if (app.getStatus() != ApplicationStatus.APPROVED) {
+            throw new RuntimeException("Product owner can only be set on approved applications");
+        }
+        // only program b
+        if (app.getCall().getProgram().getType() != ProgramType.PROGRAM_B) {
+            throw new RuntimeException(" program owner can only be set on Program B applications");
+        }
+
+        User productOwner = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        app.setProductOwner(productOwner);
+        return toDTO(appRepository.save(app));
+    }
+
+    public List<ApplicationDTO> getByCall(Long callId) {
+        return appRepository.findByCallId(callId)
+                .stream()
+                .map(this::toDTO)
+                .toList();
+    }
+
+    // Валідація переходу між статусами
     private void validateTransition(
             ApplicationStatus current,
             ApplicationStatus next) {
@@ -457,7 +493,24 @@ public class ApplicationService {
         return app;
     }
 
+
     private ApplicationDTO toDTO(Application a) {
+        boolean isProgramB = a.getCall().getProgram().getType()
+                == ProgramType.PROGRAM_B;
+        UUID organizationId = null;
+        String organizationName = null;
+
+        if (isProgramB && a.getCall().getProgram().getOrganization() != null) {
+            organizationId = a.getCall().getProgram().getOrganization().getId();
+            organizationName = a.getCall().getProgram().getOrganization().getName();
+        }
+        Long productOwnerId = null;
+        String productOwnerName = null;
+        if (a.getProductOwner() != null) {
+            productOwnerId = a.getProductOwner().getId();
+            productOwnerName = a.getProductOwner().getName();
+        }
+
         return new ApplicationDTO(
                 a.getId(),
                 a.getCall().getId(),
@@ -466,6 +519,10 @@ public class ApplicationService {
                 a.getCall().getProgram().getType().name(),
                 a.getStatus().name(),
                 a.getAdminComment(),
+                organizationId,
+                organizationName,
+                productOwnerId,
+                productOwnerName,
                 a.getFormData(),
                 a.getCreatedAt(),
                 a.getUpdatedAt()

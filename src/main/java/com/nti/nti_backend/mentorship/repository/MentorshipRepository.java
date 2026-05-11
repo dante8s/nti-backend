@@ -16,6 +16,7 @@ public interface MentorshipRepository extends JpaRepository<Mentorship, UUID> {
 
     List<Mentorship> findAllByMentorIdAndStatus(Long mentorId, MentorshipStatus status);
 
+
     boolean existsByMentorIdAndApplication_IdAndStatus(
             Long mentorId, Long applicationId, MentorshipStatus status
     );

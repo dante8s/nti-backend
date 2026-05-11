@@ -3,14 +3,14 @@ package com.nti.nti_backend.mentorship;
 
 import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.application.ApplicationRepository;
-import com.nti.nti_backend.mentorship.dto.AssignMentorRequestDTO;
-import com.nti.nti_backend.mentorship.dto.MentorshipResponseDTO;
+import com.nti.nti_backend.mentorship.dto.*;
+import com.nti.nti_backend.mentorship.entity.Consultation;
 import com.nti.nti_backend.mentorship.entity.Mentorship;
 import com.nti.nti_backend.mentorship.entity.MentorshipStatus;
+import com.nti.nti_backend.mentorship.repository.ConsultationRepository;
 import com.nti.nti_backend.mentorship.repository.MentorshipRepository;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
-import com.nti.nti_backend.mentorship.dto.PublicMentorDTO;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
@@ -31,6 +31,7 @@ public class MentorshipService {
     private final MentorshipRepository mentorshipRepository;
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
+    private final ConsultationRepository consultationRepository;
 
 
     private User getCurrentUser() {
@@ -163,6 +164,91 @@ public class MentorshipService {
                 .stream()
                 .map(this::toResponseDTO)
                 .toList();
+    }
+
+    @Transactional
+    public ConsultationResponseDTO createConsultation(ConsultationRequestDTO dto) {
+        User currentUser = getCurrentUser();
+
+        if (!currentUser.hasRole(Role.MENTOR)) {
+            throw new ConflictException("Only MENTOR can add consultations");
+        }
+
+        Mentorship mentorship = null;
+        if (dto.getMentorshipId() != null) {
+            mentorship = mentorshipRepository.findById(dto.getMentorshipId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Mentorship not found: " + dto.getMentorshipId()
+                    ));
+        }
+
+
+        Consultation consultation = Consultation.builder()
+                .mentorship(mentorship)
+                .mentor(currentUser)
+                .consultationDate(dto.getConsultationDate())
+                .topic(dto.getTopic())
+                .description(dto.getDescription())
+                .build();
+        return toConsultationDTO(consultationRepository.save(consultation));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConsultationResponseDTO> getConsultationsByMentorshipId(UUID mentorshipId) {
+        return consultationRepository
+                .findAllByMentorshipIdOrderByConsultationDateDesc(mentorshipId)
+                .stream().map(this::toConsultationDTO).toList();
+    }
+
+    @Transactional
+    public ConsultationResponseDTO updateConsultation(UUID id, ConsultationRequestDTO dto) {
+        User currentUser = getCurrentUser();
+
+        Consultation consultation = consultationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Consultation not found: " + id
+                ));
+        if (!consultation.getMentor().getId().equals(currentUser.getId())) {
+            throw new ConflictException(
+                    "Only the author can edit this consultation"
+            );
+        }
+
+        consultation.setConsultationDate(dto.getConsultationDate());
+        consultation.setDescription(dto.getDescription());
+        consultation.setTopic(dto.getTopic());
+
+        return toConsultationDTO(consultationRepository.save(consultation));
+    }
+
+    @Transactional
+    public void deleteConsultation(UUID id) {
+        User currentUser = getCurrentUser();
+
+        if (!currentUser.hasRole(Role.ADMIN)) {
+            throw new ConflictException("Only ADMIN can delete consultations");
+        }
+
+        Consultation consultation = consultationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Consultation not found: " + id
+                ));
+        consultationRepository.delete(consultation);
+    }
+
+
+    private ConsultationResponseDTO toConsultationDTO(Consultation c) {
+        return ConsultationResponseDTO.builder()
+                .id(c.getId())
+                .mentorshipId(c.getMentorship().getId())
+                .mentorId(c.getMentor().getId())
+                .mentorName(c.getMentor().getName())
+                .consultationDate(c.getConsultationDate())
+                .topic(c.getTopic())
+                .description(c.getDescription())
+                .createdAt(c.getCreatedAt())
+                .updatedAt(c.getUpdatedAt())
+                .build();
     }
 
     // Mapping
