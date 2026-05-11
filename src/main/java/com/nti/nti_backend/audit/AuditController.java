@@ -27,7 +27,9 @@ public class AuditController {
     private final ApplicationRepository applicationRepository;
 
     @GetMapping("/applications/{id}/audit")
-    @PreAuthorize("hasAnyRole('ADMIN','STUDENT')")
+    @PreAuthorize(
+            "hasAnyRole('ADMIN','SUPER_ADMIN','STUDENT','EVALUATOR','SUPER_EVALUATOR')"
+    )
     public ResponseEntity<List<AuditEventDTO>> getApplicationAudit(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
@@ -36,9 +38,15 @@ public class AuditController {
                         NOT_FOUND, "Заявку не знайдено")
                 );
 
-        boolean isAdmin = user.getAuthorities().stream()
-                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-        if (!isAdmin && !application.getApplicant().getId().equals(user.getId())) {
+        boolean privileged = user.getAuthorities().stream()
+                .anyMatch(a -> {
+                    String auth = a.getAuthority();
+                    return "ROLE_ADMIN".equals(auth)
+                            || "ROLE_SUPER_ADMIN".equals(auth)
+                            || "ROLE_EVALUATOR".equals(auth)
+                            || "ROLE_SUPER_EVALUATOR".equals(auth);
+                });
+        if (!privileged && !application.getApplicant().getId().equals(user.getId())) {
             throw new ResponseStatusException(
                     FORBIDDEN,
                     "Немає доступу до аудиту цієї заявки"

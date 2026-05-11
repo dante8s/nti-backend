@@ -1,8 +1,12 @@
 package com.nti.nti_backend.application;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface ApplicationRepository
         extends JpaRepository<Application, Long> {
@@ -17,4 +21,26 @@ public interface ApplicationRepository
 
     // Знайти конкретну заявку студента для виклику
     Optional<Application> findByApplicantIdAndCallId(Long applicantId, Long callId);
+
+    long countByStatus(ApplicationStatus status);
+
+    @Query("""
+            SELECT COUNT(a) FROM Application a
+            JOIN a.call c JOIN c.program p
+            WHERE p.organization.id = :organizationId
+            """)
+    long countByProgramOrganizationId(@Param("organizationId") UUID organizationId);
+
+    long countByCallId(Long callId);
+
+    long countByCall_Program_Id(Long programId);
+
+    @Query("""
+            SELECT DISTINCT a FROM Application a
+            JOIN FETCH a.call c
+            JOIN FETCH c.program p
+            JOIN FETCH a.applicant ap
+            LEFT JOIN FETCH p.organization
+            """)
+    List<Application> findAllForReportingExport();
 }

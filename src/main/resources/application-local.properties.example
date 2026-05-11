@@ -1,0 +1,11 @@
+# Copy to src/main/resources/application-local.properties (ignored by git).
+
+# Example when another process already uses 8080:
+# server.port=8081
+# app.backend-url=http://localhost:8081
+
+# Example mail / keys (do not commit real secrets):
+# spring.mail.username=
+# spring.mail.password=
+# recaptcha.secret=
+# jwt.secret=

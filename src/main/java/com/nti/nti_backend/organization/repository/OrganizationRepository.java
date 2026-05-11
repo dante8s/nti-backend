@@ -16,6 +16,8 @@ public interface OrganizationRepository extends JpaRepository<Organization, UUID
 
     List<Organization> findAllByStatus(OrgStatus status);
 
+    long countByStatus(OrgStatus status);
+
     @Query("SELECT o FROM Organization o LEFT JOIN FETCH o.members m LEFT JOIN FETCH m.user WHERE o.id = :id")
     Optional<Organization> findByIdWithMembers(UUID id);
 }

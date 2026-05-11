@@ -1,6 +1,5 @@
 package com.nti.nti_backend.application;
 
-import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,8 +22,6 @@ import java.util.UUID;
 public class ApplicationController {
 
     private final ApplicationService appService;
-    private final DocumentRepository documentRepository;
-    private final AuditService auditService;
 
     // Створити draft
     @PostMapping("/applications")
@@ -85,19 +82,23 @@ public class ApplicationController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Одна заявка
+    // Одна заявка (власник, ментор, комісія, адмін)
     @GetMapping("/applications/{id}")
-    public ResponseEntity<ApplicationDTO> getOne(
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> getOne(
+            @AuthenticationPrincipal User user,
             @PathVariable Long id) {
-        return ResponseEntity.ok(appService.getById(id));
-    }
-
-    // Статус документів заявки
-    @GetMapping("/applications/{id}/documents/status")
-    @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<List<DocumentStatusDTO>> getDocumentStatus(
-            @PathVariable Long id) {
-        return ResponseEntity.ok(appService.getDocumentStatus(id));
+        try {
+            return ResponseEntity.ok(appService.getByIdForViewer(id, user));
+        } catch (RuntimeException e) {
+            if ("Немає доступу".equals(e.getMessage())) {
+                return ResponseEntity.status(403).build();
+            }
+            if ("Заявку не знайдено".equals(e.getMessage())) {
+                return ResponseEntity.notFound().build();
+            }
+            throw e;
+        }
     }
 
     // Upload документу
@@ -149,9 +150,9 @@ public class ApplicationController {
         return ResponseEntity.ok(appService.getAll());
     }
 
-    // Змінити статус — ADMIN
+    // Змінити статус — адмін або уповноважений комісії (SUPER_EVALUATOR)
     @PatchMapping("/admin/applications/{id}/status")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_EVALUATOR')")
     public ResponseEntity<?> changeStatus(
             @AuthenticationPrincipal User admin,
             @PathVariable Long id,
