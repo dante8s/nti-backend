@@ -4,8 +4,6 @@ CREATE TABLE applications (
                                   REFERENCES calls(id),
                               applicant_id  BIGINT      NOT NULL
                                   REFERENCES users(id),
-                              product_owner_id BIGINT NULL
-                                  REFERENCES users(id) ON DELETE SET NULL,
                               status        VARCHAR(30) NOT NULL
                                                                  DEFAULT 'DRAFT',
                               admin_comment TEXT,
