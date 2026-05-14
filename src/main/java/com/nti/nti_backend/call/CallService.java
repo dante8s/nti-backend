@@ -71,6 +71,14 @@ public class CallService {
         callRepository.save(call);
     }
 
+    // Get all calls for Program
+    public List<CallDTO> getByProgram(Long programId) {
+        return callRepository.findByProgramId(programId)
+                .stream()
+                .map(this::toDTO)
+                .toList();
+    }
+
     private CallDTO toDTO(Call c) {
         return new CallDTO(
                 c.getId(),

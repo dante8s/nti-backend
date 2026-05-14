@@ -4,11 +4,17 @@ import com.nti.nti_backend.auth.InviteOrgMemberRequest;
 import com.nti.nti_backend.organization.dto.*;
 import com.nti.nti_backend.organization.entity.OrgStatus;
 import com.nti.nti_backend.organization.repository.OrganizationRepository;
+import com.nti.nti_backend.program.ProgramBRequirementsDTO;
+import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URI;
 import java.util.List;
@@ -123,5 +129,52 @@ public class OrganizationController {
             @RequestParam OrgStatus status
     ) {
         return ResponseEntity.ok(orgService.changeStatus(id, status));
+    }
+
+    @PostMapping("/program-b-requirements/{programId}/specification")
+    @PreAuthorize("hasAnyRole('FIRM', 'FIRM_USER')")
+    public ResponseEntity<ProgramBRequirementsDTO> uploadSpec(
+            @PathVariable Long programId,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(orgService.uploadSpecification(programId, file, user));
+    }
+
+    @PostMapping("/program-b-requirements/{programId}/budget")
+    @PreAuthorize("hasAnyRole('FIRM', 'FIRM_USER')")
+    public ResponseEntity<ProgramBRequirementsDTO> uploadBudget(
+            @PathVariable Long programId,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(orgService.uploadBudget(programId, file, user));
+    }
+
+    @GetMapping("/program-b-requirements/{programId}")
+    public ResponseEntity<ProgramBRequirementsDTO> getProgramBRequirements(
+            @PathVariable Long programId
+    ) {
+        return ResponseEntity.ok(orgService.getByProgram(programId));
+    }
+
+    // GET /api/organizations/requirements/{programId}/specification?inline=true
+    @GetMapping("/requirements/{programId}/specification")
+    public ResponseEntity<Resource> serveSpecification(
+            @PathVariable Long programId,
+            @RequestParam(defaultValue = "false") boolean inline,
+            @AuthenticationPrincipal User user
+    ) {
+        return orgService.serveSpecification(programId, inline, user);
+    }
+
+    // GET /api/organizations/requirements/{programId}/budget?inline=true
+    @GetMapping("/requirements/{programId}/budget")
+    public ResponseEntity<Resource> serveBudget(
+            @PathVariable Long programId,
+            @RequestParam(defaultValue = "false") boolean inline,
+            @AuthenticationPrincipal User user
+    ) {
+        return orgService.serveBudget(programId, inline, user);
     }
 }

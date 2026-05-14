@@ -1,6 +1,7 @@
 package com.nti.nti_backend.application;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record ApplicationDTO(
         Long id,
@@ -10,6 +11,10 @@ public record ApplicationDTO(
         String programType,
         String status,
         String adminComment,
+        UUID organizationId,
+        String organizationName,
+        Long productOwnerId,
+        String productOwnerName,
         String formData,        // JSON-рядок з даними форми
         LocalDateTime createdAt,
         LocalDateTime updatedAt

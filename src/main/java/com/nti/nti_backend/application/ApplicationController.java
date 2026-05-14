@@ -1,5 +1,6 @@
 package com.nti.nti_backend.application;
 
+import com.nti.nti_backend.Application;
 import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -171,4 +172,24 @@ public class ApplicationController {
                     .body(e.getMessage());
         }
     }
+
+    // Add product owner
+    @PatchMapping("/applications/{id}/product-owner")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<ApplicationDTO> setProductOwner(
+            @PathVariable Long id,
+            @RequestParam Long userId,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        return ResponseEntity.ok(appService.setProductOwner(id, userId, currentUser));
+    }
+
+    @GetMapping("/applications/by-call/{callId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FIRM', 'FIRM_USER')")
+    public ResponseEntity<List<ApplicationDTO>> getByCall(
+            @PathVariable Long callId
+    ) {
+        return ResponseEntity.ok(appService.getByCall(callId));
+    }
+}
 }

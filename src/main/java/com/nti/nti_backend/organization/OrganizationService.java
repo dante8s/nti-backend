@@ -2,6 +2,7 @@ package com.nti.nti_backend.organization;
 
 import com.nti.nti_backend.auth.InviteOrgMemberRequest;
 import com.nti.nti_backend.email.EmailService;
+import com.nti.nti_backend.file.FileServeService;
 import com.nti.nti_backend.organization.dto.*;
 import com.nti.nti_backend.organization.entity.OrgMember;
 import com.nti.nti_backend.organization.entity.OrgMemberRole;
@@ -11,15 +12,27 @@ import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
 import com.nti.nti_backend.organization.repository.OrgMemberRepository;
 import com.nti.nti_backend.organization.repository.OrganizationRepository;
+import com.nti.nti_backend.program.*;
 import com.nti.nti_backend.user.AccountStatus;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -31,7 +44,13 @@ public class OrganizationService {
     private final OrganizationRepository orgRepository;
     private final OrgMemberRepository memberRepository;
     private final UserRepository userRepository;
+    private final ProgramBRequirementsRepository requirementsRepository;
     private final EmailService emailService;
+    private final ProgramRepository programRepository;
+    private final FileServeService fileServeService;
+
+    @Value("${app.upload-dir:uploads}")
+    private String uploadDir;
 
     // get authenticated user from JWT
     private User getCurrentUser() {
@@ -399,6 +418,187 @@ public class OrganizationService {
                 ));
         org.setStatus(newStatus);
         return toResponseDTOSlim(orgRepository.save(org));
+    }
+
+    @Transactional
+    public ProgramBRequirementsDTO uploadSpecification(
+            Long programId, MultipartFile file, User currentUser
+    ) {
+        Program program = programRepository.findById(programId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Program not found with id: " + programId));
+        if (program.getType() != ProgramType.PROGRAM_B) {
+            throw new ConflictException(
+                    "Specifications only apply to Program B"
+            );
+        }
+
+        boolean ownsProgram = memberRepository
+                .findAllByUserId(currentUser.getId())
+                .stream()
+                .filter(m -> m.getRole() == OrgMemberRole.OWNER)
+                .anyMatch(m -> program.getOrganization() != null
+                && m.getOrganization().getId().equals(program.getOrganization().getId()));
+
+        if (!ownsProgram && !currentUser.hasRole(Role.ADMIN)) {
+            throw new ConflictException(
+                    "You do not own this Program B"
+            );
+        }
+
+        String path = saveFile(file, programId, "spec");
+
+        ProgramBRequirements req = requirementsRepository.
+                findByProgramId(programId)
+                .orElse(ProgramBRequirements.builder()
+                        .program(program)
+                        .build());
+        req.setSpecificationName(file.getOriginalFilename());
+        req.setSpecificationPath(path);
+
+        return toProgramBRequirementsDTO(requirementsRepository.save(req));
+    }
+
+    @Transactional
+    public ProgramBRequirementsDTO uploadBudget(
+            Long programId, MultipartFile file, User currentUser
+    ) {
+        if (!currentUser.hasRole(Role.FIRM)) {
+            throw new ConflictException("Only  organization OWNER can upload attachments");
+        }
+
+        Program program = programRepository.findById(programId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Program not found with id: " + programId));
+        if (program.getType() != ProgramType.PROGRAM_B) {
+            throw new ConflictException(
+                    "Budget only applies to Program B"
+            );
+        }
+
+        String path = saveFile(file, programId, "budget");
+        ProgramBRequirements req = requirementsRepository
+                .findByProgramId(programId)
+                .orElse(ProgramBRequirements.builder()
+                        .program(program)
+                        .build());
+        req.setBudgetName(file.getOriginalFilename());
+        req.setBudgetPath(path);
+
+        return toProgramBRequirementsDTO(requirementsRepository.save(req));
+    }
+
+    @Transactional(readOnly = true)
+    public ProgramBRequirementsDTO getByProgram(Long programId) {
+        return requirementsRepository.findByProgramId(programId)
+                .map(this::toProgramBRequirementsDTO)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No requirements found for application: " + programId
+                ));
+    }
+
+    private String saveFile(MultipartFile file, Long applicationId, String type) {
+        try {
+            String filename = applicationId  + "_" + type + "_"
+                    + System.currentTimeMillis() + "_"
+                    + file.getOriginalFilename();
+            Path uploadPath = Paths.get(uploadDir);
+            Files.createDirectories(uploadPath);
+            Path filePath = uploadPath.resolve(filename);
+            Files.copy(file.getInputStream(), filePath,
+                    StandardCopyOption.REPLACE_EXISTING);
+            return filePath.toString();
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to store file: " + e.getMessage());
+        }
+    }
+
+    public ResponseEntity<Resource> serveSpecification(
+            Long programId, boolean inline, User currentUser
+    ) {
+        ProgramBRequirements req = requirementsRepository
+                .findByProgramId(programId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No requirements found for program: "  + programId
+                ));
+        checkFileAccess(req, currentUser);
+
+        if (req.getSpecificationPath() == null) {
+            throw new ResourceNotFoundException(
+                    "No specification uploaded yet"
+            );
+        }
+
+        Resource resource = fileServeService.load(req.getSpecificationPath());
+        String contentType = fileServeService.detectContentType(req.getSpecificationName());
+        String disposition = fileServeService.contentDisposition(
+                inline, req.getSpecificationName()
+        );
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(resource);
+    }
+
+    public ResponseEntity<Resource> serveBudget(
+            Long programId, boolean inline, User currentUser
+    ) {
+        ProgramBRequirements req = requirementsRepository
+                .findByProgramId(programId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No requirements found for program: " + programId
+                ));
+        checkFileAccess(req, currentUser);
+
+        if (req.getBudgetPath() == null) {
+            throw new ResourceNotFoundException("No budget uploaded yet");
+        }
+
+        Resource resource = fileServeService.load(req.getBudgetPath());
+        String contentType = fileServeService.detectContentType(req.getBudgetName());
+        String disposition = fileServeService.contentDisposition(
+                inline, req.getBudgetName()
+        );
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(resource);
+    }
+
+    // Role check
+    private void checkFileAccess(ProgramBRequirements req, User currentUser) {
+        if (currentUser.hasRole(Role.ADMIN)) return;
+        if (currentUser.hasRole(Role.FIRM)
+                || currentUser.hasRole(Role.FIRM_USER)
+        ) {
+            boolean ownsOrg = memberRepository
+                    .findAllByUserId(currentUser.getId())
+                    .stream()
+                    .anyMatch(m -> req.getProgram().getOrganization() != null
+                    && m.getOrganization().getId()
+                            .equals(req.getProgram().getOrganization().getId()));
+            if (ownsOrg) return;
+        }
+
+        if (currentUser.hasRole(Role.MENTOR)
+        || currentUser.hasRole(Role.STUDENT)) return;
+
+        throw new ConflictException("You do not have access to this file");
+    }
+
+    private ProgramBRequirementsDTO toProgramBRequirementsDTO(ProgramBRequirements r) {
+        return ProgramBRequirementsDTO.builder()
+                .id(r.getId())
+                .programId(r.getProgram().getId())
+                .specificationName(r.getSpecificationName())
+                .specificationPath(r.getSpecificationPath())
+                .budgetName(r.getBudgetName())
+                .budgetPath(r.getBudgetPath())
+                .updatedAt(r.getUpdatedAt())
+                .build();
     }
 
     // Mapping
