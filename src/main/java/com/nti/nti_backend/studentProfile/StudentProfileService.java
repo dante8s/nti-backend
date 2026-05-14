@@ -10,7 +10,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Transactional
@@ -19,6 +21,19 @@ public class StudentProfileService {
     private final StudentProfileRepository studentProfileRepository;
 
     private final String uploadDir = "uploads/cv/";
+
+    private final String avatarUploadDir = "uploads/profile-photos/";
+
+    private static final long MAX_AVATAR_BYTES = 10L * 1024 * 1024;
+
+    private static final List<String> DANGEROUS_SUFFIXES = List.of(
+            ".exe", ".bat", ".cmd", ".sh", ".dll", ".jar", ".php", ".html", ".htm"
+    );
+
+    private static final String[] IMAGE_SUFFIXES = {
+            ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff",
+            ".heic", ".heif", ".avif", ".ico", ".jfif", ".pjpeg", ".pjp", ".svg",
+    };
 
     public StudentProfileService(StudentProfileRepository studentProfileRepository) {
         this.studentProfileRepository = studentProfileRepository;
@@ -99,6 +114,58 @@ public class StudentProfileService {
         return studentProfileRepository.save(profile);
     }
 
+    public StudentProfile clearProfilePhoto(Long userId) {
+        StudentProfile profile = getProfileById(userId);
+        if (profile.getAvatarFilePath() != null) {
+            try {
+                Files.deleteIfExists(Paths.get(profile.getAvatarFilePath()));
+            } catch (IOException ignored) {
+            }
+        }
+        profile.setAvatarFilePath(null);
+        profile.setAvatarOriginalName(null);
+        profile.setAvatarUploadedAt(null);
+        return studentProfileRepository.save(profile);
+    }
+
+    public StudentProfile uploadProfilePhoto(Long userId, MultipartFile file) throws IOException {
+        if (file.isEmpty()) {
+            throw new IllegalStateException("Cannot upload an empty file");
+        }
+        if (file.getSize() > MAX_AVATAR_BYTES) {
+            throw new IllegalStateException("Photo must be at most 10 MB");
+        }
+
+        String contentType = file.getContentType();
+        String originalFileName = file.getOriginalFilename();
+        if (originalFileName == null || originalFileName.isBlank()) {
+            throw new IllegalStateException("File name is required");
+        }
+        if (!isAllowedProfileImage(originalFileName, contentType)) {
+            throw new IllegalStateException("Дозволено лише зображення (типові формати фото)");
+        }
+
+        StudentProfile profile = getProfileById(userId);
+        String filename = userId + "_" + System.currentTimeMillis() + "_"
+                + originalFileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        Path targetPath = Paths.get(avatarUploadDir).resolve(filename);
+        Files.createDirectories(targetPath.getParent());
+        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+        if (profile.getAvatarFilePath() != null) {
+            try {
+                Files.deleteIfExists(Paths.get(profile.getAvatarFilePath()));
+            } catch (IOException ignored) {
+            }
+        }
+
+        profile.setAvatarFilePath(targetPath.toString());
+        profile.setAvatarOriginalName(file.getOriginalFilename());
+        profile.setAvatarUploadedAt(LocalDateTime.now());
+
+        return studentProfileRepository.save(profile);
+    }
+
     @Transactional(readOnly = true)
     public List<StudentProfile> getProfileWithCv() {
         return studentProfileRepository.findByCvFilePathIsNotNull();
@@ -129,5 +196,25 @@ public class StudentProfileService {
                 && profile.getYearOfStudy() != null
                 && profile.getSkills() != null && !profile.getSkills().isBlank()
                 && profile.getCvFilePath() != null;
+    }
+
+    private boolean isAllowedProfileImage(String filename, String contentType) {
+        if (filename == null || filename.isBlank()) {
+            return false;
+        }
+        String lower = filename.toLowerCase(Locale.ROOT);
+        for (String bad : DANGEROUS_SUFFIXES) {
+            if (lower.endsWith(bad)) {
+                return false;
+            }
+        }
+        String ct = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT).trim();
+        if (!ct.isEmpty() && !ct.startsWith("image/") && !"application/octet-stream".equals(ct)) {
+            return false;
+        }
+        if (ct.startsWith("image/")) {
+            return true;
+        }
+        return Arrays.stream(IMAGE_SUFFIXES).anyMatch(lower::endsWith);
     }
 }

@@ -41,6 +41,15 @@ public class StudentProfile {
     @Column(name = "cv_uploaded_at", updatable = false)
     private LocalDateTime cvUploadedAt;
 
+    @Column(name = "avatar_file_path", length = 512)
+    private String avatarFilePath;
+
+    @Column(name = "avatar_original_name", length = 255)
+    private String avatarOriginalName;
+
+    @Column(name = "avatar_uploaded_at")
+    private LocalDateTime avatarUploadedAt;
+
     @Column(name = "has_repeated_subjects")
     private boolean hasRepeatedSubjects = false;
 
@@ -102,6 +111,30 @@ public class StudentProfile {
 
     public void setCvUploadedAt(LocalDateTime cvUploadedAt) {
         this.cvUploadedAt = cvUploadedAt;
+    }
+
+    public String getAvatarFilePath() {
+        return avatarFilePath;
+    }
+
+    public void setAvatarFilePath(String avatarFilePath) {
+        this.avatarFilePath = avatarFilePath;
+    }
+
+    public String getAvatarOriginalName() {
+        return avatarOriginalName;
+    }
+
+    public void setAvatarOriginalName(String avatarOriginalName) {
+        this.avatarOriginalName = avatarOriginalName;
+    }
+
+    public LocalDateTime getAvatarUploadedAt() {
+        return avatarUploadedAt;
+    }
+
+    public void setAvatarUploadedAt(LocalDateTime avatarUploadedAt) {
+        this.avatarUploadedAt = avatarUploadedAt;
     }
 
     public boolean isHasRepeatedSubjects() { return hasRepeatedSubjects; }
