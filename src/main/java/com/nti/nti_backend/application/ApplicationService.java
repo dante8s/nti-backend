@@ -345,10 +345,11 @@ public class ApplicationService {
         return "pdf";
     }
 
+    @Transactional(readOnly = true)
     public List<ApplicationDTO> getMyApplications(
             Long userId) {
         return appRepository
-                .findByApplicantId(userId)
+                .findByApplicantIdWithDetails(userId)
                 .stream()
                 .map(this::toDTO)
                 .toList();

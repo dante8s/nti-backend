@@ -135,6 +135,7 @@ public class AuthService {
                 .collect(Collectors.toSet());
 
         return new AuthResponse(
+                user.getId(),
                 token,
                 user.getName(),
                 user.getEmail(),

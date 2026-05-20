@@ -25,6 +25,7 @@ import com.nti.nti_backend.studentProfile.StudentProfileRepository;
 import com.nti.nti_backend.team.Team;
 import com.nti.nti_backend.team.TeamRepository;
 import com.nti.nti_backend.teamMember.TeamMember;
+import com.nti.nti_backend.teamMember.TeamMemberRepository;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -58,6 +59,7 @@ public class ReportingService {
     private final CriteriaRepository criteriaRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final TeamRepository teamRepository;
+    private final TeamMemberRepository teamMemberRepository;
     private final EvaluationRepository evaluationRepository;
     private final ApplicationRepository applicationRepository;
     private final CallRepository callRepository;
@@ -70,6 +72,7 @@ public class ReportingService {
     public ReportingService(CriteriaRepository criteriaRepository,
                             StudentProfileRepository studentProfileRepository,
                             TeamRepository teamRepository,
+                            TeamMemberRepository teamMemberRepository,
                             EvaluationRepository evaluationRepository,
                             ApplicationRepository applicationRepository,
                             CallRepository callRepository,
@@ -80,6 +83,7 @@ public class ReportingService {
                             MentorshipRepository mentorshipRepository) {
         this.studentProfileRepository = studentProfileRepository;
         this.teamRepository = teamRepository;
+        this.teamMemberRepository = teamMemberRepository;
         this.criteriaRepository = criteriaRepository;
         this.evaluationRepository = evaluationRepository;
         this.applicationRepository = applicationRepository;
@@ -203,8 +207,54 @@ public class ReportingService {
         stats.put("averageGrade", studentProfileRepository.findAverageProfileGrade());
         stats.put("totalTeams", teamRepository.count());
         stats.put("eligibleTeams", teamRepository.findTeamsWithMinimumSize(3).size());
+        stats.put("callsWithWinningTeam",
+                applicationRepository.countDistinctCallsByStatus(ApplicationStatus.APPROVED));
 
         return stats;
+    }
+
+    public Map<String, Object> getTeamsReport(Long callId,
+                                              String program,
+                                              String applicationStatus,
+                                              Boolean linkedToCall,
+                                              Boolean winnerOnly,
+                                              Integer minMembers,
+                                              int page,
+                                              int size) {
+        List<Map<String, Object>> rows = buildTeamListRows(
+                callId, program, applicationStatus, linkedToCall, winnerOnly, minMembers);
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 200);
+        int total = rows.size();
+        int from = Math.min(safePage * safeSize, total);
+        int to = Math.min(from + safeSize, total);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", rows.subList(from, to));
+        result.put("total", total);
+        result.put("page", safePage);
+        result.put("size", safeSize);
+        return result;
+    }
+
+    public byte[] exportTeamsReport(String format,
+                                    Long callId,
+                                    String program,
+                                    String applicationStatus,
+                                    Boolean linkedToCall,
+                                    Boolean winnerOnly,
+                                    Integer minMembers) throws IOException {
+        String f = format == null ? "csv" : format.trim().toLowerCase(Locale.ROOT);
+        List<String[]> table = buildTeamExportTable(
+                callId, program, applicationStatus, linkedToCall, winnerOnly, minMembers);
+
+        return switch (f) {
+            case "csv" -> toCsv(table);
+            case "xlsx" -> toXlsx(table, "Teams");
+            case "pdf" -> toPdf(table);
+            case "docx" -> toDocx(table);
+            default -> throw new IllegalArgumentException("Unsupported format: " + format);
+        };
     }
 
     public Map<String, Object> getStudentDashboard(Long userId) {
@@ -381,11 +431,321 @@ public class ReportingService {
 
         return switch (f) {
             case "csv" -> toCsv(table);
-            case "xlsx" -> toXlsx(table);
+            case "xlsx" -> toXlsx(table, "Applications");
             case "pdf" -> toPdf(table);
             case "docx" -> toDocx(table);
             default -> throw new IllegalArgumentException("Unsupported format: " + format);
         };
+    }
+
+    private List<Map<String, Object>> buildTeamListRows(Long callIdFilter,
+                                                        String program,
+                                                        String applicationStatusStr,
+                                                        Boolean linkedToCall,
+                                                        Boolean winnerOnly,
+                                                        Integer minMembers) {
+        List<Team> teams = teamRepository.findAllForReporting();
+        Map<Long, List<Application>> appsByLeader = loadApplicationsByLeader(teams);
+        ApplicationStatus statusFilter = parseStatus(applicationStatusStr);
+        ProgramType programType = parseProgram(program);
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Team team : teams) {
+            if (!passesMinMembers(team, minMembers)) {
+                continue;
+            }
+            User leader = team.getLeader();
+            Long leaderId = leader != null ? leader.getId() : null;
+            List<Application> leaderApps = leaderId == null
+                    ? List.of()
+                    : appsByLeader.getOrDefault(leaderId, List.of());
+
+            if (!passesLinkedFilter(leaderApps, linkedToCall)) {
+                continue;
+            }
+
+            List<Application> filtered = filterTeamApplications(
+                    leaderApps, callIdFilter, programType, statusFilter);
+
+            if (Boolean.TRUE.equals(linkedToCall) && filtered.isEmpty()) {
+                continue;
+            }
+            if (callIdFilter != null || programType != null || statusFilter != null) {
+                if (filtered.isEmpty()) {
+                    continue;
+                }
+            }
+            if (Boolean.TRUE.equals(winnerOnly) && !hasApprovedApplication(filtered)) {
+                continue;
+            }
+
+            Application primary = filtered.isEmpty() ? null : filtered.get(0);
+            rows.add(buildTeamRowMap(team, leader, leaderApps, filtered, primary, true));
+        }
+        return rows;
+    }
+
+    private List<String[]> buildTeamExportTable(Long callIdFilter,
+                                                String program,
+                                                String applicationStatusStr,
+                                                Boolean linkedToCall,
+                                                Boolean winnerOnly,
+                                                Integer minMembers) {
+        List<Team> teams = teamRepository.findAllForReporting();
+        Map<Long, List<Application>> appsByLeader = loadApplicationsByLeader(teams);
+        ApplicationStatus statusFilter = parseStatus(applicationStatusStr);
+        ProgramType programType = parseProgram(program);
+
+        List<String[]> rows = new ArrayList<>();
+        rows.add(new String[]{
+                "teamId", "teamName", "leaderId", "leaderName", "leaderEmail",
+                "acceptedMembers", "maxCapacity", "linkedToCall",
+                "applicationId", "callId", "callTitle", "callDeadline", "programType",
+                "organizationName", "applicationStatus", "isWinner",
+                "applicationsCount", "pendingApprovalMilestones",
+                "overdueOrAttentionMilestones", "totalMilestones"
+        });
+
+        DateTimeFormatter dtf = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+        for (Team team : teams) {
+            if (!passesMinMembers(team, minMembers)) {
+                continue;
+            }
+            User leader = team.getLeader();
+            Long leaderId = leader != null ? leader.getId() : null;
+            List<Application> leaderApps = leaderId == null
+                    ? List.of()
+                    : appsByLeader.getOrDefault(leaderId, List.of());
+
+            if (!passesLinkedFilter(leaderApps, linkedToCall)) {
+                continue;
+            }
+
+            List<Application> filtered = filterTeamApplications(
+                    leaderApps, callIdFilter, programType, statusFilter);
+
+            if (Boolean.TRUE.equals(linkedToCall) && filtered.isEmpty()) {
+                continue;
+            }
+            if (callIdFilter != null || programType != null || statusFilter != null) {
+                if (filtered.isEmpty()) {
+                    continue;
+                }
+            }
+            if (Boolean.TRUE.equals(winnerOnly) && !hasApprovedApplication(filtered)) {
+                continue;
+            }
+
+            long accepted = teamMemberRepository.countAcceptedMembers(team.getId());
+            MilestoneTotals totals = aggregateMilestonesForApplications(filtered.isEmpty()
+                    ? leaderApps
+                    : filtered);
+
+            if (filtered.isEmpty()) {
+                rows.add(teamExportCells(team, leader, accepted, null, leaderApps.size(), totals, dtf));
+            } else {
+                for (Application app : filtered) {
+                    rows.add(teamExportCells(team, leader, accepted, app, leaderApps.size(), totals, dtf));
+                }
+            }
+        }
+        return rows;
+    }
+
+    private Map<Long, List<Application>> loadApplicationsByLeader(List<Team> teams) {
+        List<Long> leaderIds = teams.stream()
+                .map(Team::getLeader)
+                .filter(Objects::nonNull)
+                .map(User::getId)
+                .distinct()
+                .toList();
+        if (leaderIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<Application>> grouped = new LinkedHashMap<>();
+        for (Application app : applicationRepository.findByApplicantIdInWithDetails(leaderIds)) {
+            Long applicantId = app.getApplicant().getId();
+            grouped.computeIfAbsent(applicantId, k -> new ArrayList<>()).add(app);
+        }
+        return grouped;
+    }
+
+    private boolean passesMinMembers(Team team, Integer minMembers) {
+        if (minMembers == null || minMembers < 1) {
+            return true;
+        }
+        return teamMemberRepository.countAcceptedMembers(team.getId()) >= minMembers;
+    }
+
+    private boolean passesLinkedFilter(List<Application> leaderApps, Boolean linkedToCall) {
+        if (linkedToCall == null) {
+            return true;
+        }
+        boolean hasAny = !leaderApps.isEmpty();
+        return linkedToCall ? hasAny : !hasAny;
+    }
+
+    private List<Application> filterTeamApplications(List<Application> apps,
+                                                     Long callIdFilter,
+                                                     ProgramType programType,
+                                                     ApplicationStatus statusFilter) {
+        return apps.stream().filter(a -> {
+            Call c = a.getCall();
+            if (c == null) {
+                return false;
+            }
+            if (callIdFilter != null && !Objects.equals(c.getId(), callIdFilter)) {
+                return false;
+            }
+            Program p = c.getProgram();
+            if (programType != null && (p == null || p.getType() != programType)) {
+                return false;
+            }
+            if (statusFilter != null && a.getStatus() != statusFilter) {
+                return false;
+            }
+            return true;
+        }).toList();
+    }
+
+    private boolean hasApprovedApplication(List<Application> apps) {
+        return apps.stream().anyMatch(a -> a.getStatus() == ApplicationStatus.APPROVED);
+    }
+
+    private Map<String, Object> buildTeamRowMap(Team team,
+                                                User leader,
+                                                List<Application> allLeaderApps,
+                                                List<Application> filteredApps,
+                                                Application primary,
+                                                boolean listView) {
+        long accepted = teamMemberRepository.countAcceptedMembers(team.getId());
+        List<Application> milestoneSource = filteredApps.isEmpty() ? allLeaderApps : filteredApps;
+        MilestoneTotals totals = aggregateMilestonesForApplications(milestoneSource);
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("teamId", team.getId());
+        row.put("teamName", team.getName());
+        row.put("leaderId", leader != null ? leader.getId() : null);
+        row.put("leaderName", leader != null ? leader.getName() : null);
+        row.put("leaderEmail", leader != null ? leader.getEmail() : null);
+        row.put("acceptedMembers", accepted);
+        row.put("maxCapacity", team.getMaxCapacity());
+        row.put("applicationsCount", allLeaderApps.size());
+        row.put("linkedToCall", !allLeaderApps.isEmpty());
+        row.put("pendingApprovalMilestones", totals.pendingApproval);
+        row.put("overdueOrAttentionMilestones", totals.overdueOrAttention);
+        row.put("totalMilestones", totals.total);
+
+        if (primary == null) {
+            row.put("applicationId", null);
+            row.put("callId", null);
+            row.put("callTitle", null);
+            row.put("callDeadline", null);
+            row.put("programType", null);
+            row.put("organizationName", null);
+            row.put("applicationStatus", null);
+            row.put("isWinner", false);
+        } else {
+            Call c = primary.getCall();
+            Program p = c != null ? c.getProgram() : null;
+            Organization o = p != null ? p.getOrganization() : null;
+            row.put("applicationId", primary.getId());
+            row.put("callId", c != null ? c.getId() : null);
+            row.put("callTitle", c != null ? c.getTitle() : null);
+            row.put("callDeadline", c != null ? c.getDeadline() : null);
+            row.put("programType", p != null ? p.getType().name() : null);
+            row.put("organizationName", o != null ? o.getName() : null);
+            row.put("applicationStatus", primary.getStatus().name());
+            row.put("isWinner", primary.getStatus() == ApplicationStatus.APPROVED);
+        }
+
+        if (listView && filteredApps.size() > 1) {
+            row.put("additionalCallsCount", filteredApps.size() - 1);
+        }
+        return row;
+    }
+
+    private String[] teamExportCells(Team team,
+                                     User leader,
+                                     long acceptedMembers,
+                                     Application app,
+                                     int applicationsCount,
+                                     MilestoneTotals totals,
+                                     DateTimeFormatter dtf) {
+        boolean linked = applicationsCount > 0;
+        if (app == null) {
+            return new String[]{
+                    String.valueOf(team.getId()),
+                    safe(team.getName()),
+                    leader != null ? String.valueOf(leader.getId()) : "",
+                    safe(leader != null ? leader.getName() : null),
+                    safe(leader != null ? leader.getEmail() : null),
+                    String.valueOf(acceptedMembers),
+                    team.getMaxCapacity() != null ? String.valueOf(team.getMaxCapacity()) : "",
+                    String.valueOf(linked),
+                    "", "", "", "", "", "",
+                    "", "false",
+                    String.valueOf(applicationsCount),
+                    String.valueOf(totals.pendingApproval),
+                    String.valueOf(totals.overdueOrAttention),
+                    String.valueOf(totals.total)
+            };
+        }
+        Call c = app.getCall();
+        Program p = c != null ? c.getProgram() : null;
+        Organization o = p != null ? p.getOrganization() : null;
+        return new String[]{
+                String.valueOf(team.getId()),
+                safe(team.getName()),
+                leader != null ? String.valueOf(leader.getId()) : "",
+                safe(leader != null ? leader.getName() : null),
+                safe(leader != null ? leader.getEmail() : null),
+                String.valueOf(acceptedMembers),
+                team.getMaxCapacity() != null ? String.valueOf(team.getMaxCapacity()) : "",
+                String.valueOf(linked),
+                String.valueOf(app.getId()),
+                c != null ? String.valueOf(c.getId()) : "",
+                safe(c != null ? c.getTitle() : null),
+                c != null && c.getDeadline() != null ? dtf.format(c.getDeadline()) : "",
+                p != null ? p.getType().name() : "",
+                safe(o != null ? o.getName() : null),
+                app.getStatus().name(),
+                String.valueOf(app.getStatus() == ApplicationStatus.APPROVED),
+                String.valueOf(applicationsCount),
+                String.valueOf(totals.pendingApproval),
+                String.valueOf(totals.overdueOrAttention),
+                String.valueOf(totals.total)
+        };
+    }
+
+    private MilestoneTotals aggregateMilestonesForApplications(List<Application> applications) {
+        MilestoneTotals totals = new MilestoneTotals();
+        LocalDate today = LocalDate.now();
+        Set<Long> seenAppIds = new HashSet<>();
+        for (Application app : applications) {
+            if (!seenAppIds.add(app.getId())) {
+                continue;
+            }
+            for (Milestone m : milestoneRepository.findAllByApplication_Id(app.getId())) {
+                totals.total++;
+                if (m.getStatus() == MilestoneStatus.PENDING_APPROVAL) {
+                    totals.pendingApproval++;
+                }
+                boolean notDone = m.getStatus() != MilestoneStatus.COMPLETED;
+                if (m.getStatus() == MilestoneStatus.OVERDUE
+                        || (notDone && m.getDueDate() != null && m.getDueDate().isBefore(today))) {
+                    totals.overdueOrAttention++;
+                }
+            }
+        }
+        return totals;
+    }
+
+    private static final class MilestoneTotals {
+        int pendingApproval;
+        int overdueOrAttention;
+        int total;
     }
 
     private List<Application> filterApplications(List<Application> all,
@@ -527,8 +887,12 @@ public class ReportingService {
     }
 
     private byte[] toXlsx(List<String[]> rows) throws IOException {
+        return toXlsx(rows, "Applications");
+    }
+
+    private byte[] toXlsx(List<String[]> rows, String sheetName) throws IOException {
         try (Workbook wb = new XSSFWorkbook()) {
-            Sheet sheet = wb.createSheet("Applications");
+            Sheet sheet = wb.createSheet(sheetName != null ? sheetName : "Report");
             CellStyle headerStyle = buildHeaderStyle(wb);
             for (int r = 0; r < rows.size(); r++) {
                 Row row = sheet.createRow(r);

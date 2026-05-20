@@ -22,11 +22,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ApplicationController {
 
+    private static final String STUDENT_OR_SUPER_ADMIN =
+            "hasAnyRole('STUDENT','SUPER_ADMIN')";
+
     private final ApplicationService appService;
 
     // Створити draft
     @PostMapping("/applications")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<ApplicationDTO> create(
             @AuthenticationPrincipal User user,
             @Valid @RequestBody CreateApplicationRequest request) {
@@ -38,7 +41,7 @@ public class ApplicationController {
      * Оновити formData чернетки або NEEDS_REVISION без зміни статусу.
      */
     @PutMapping("/applications/{id}")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<ApplicationDTO> update(
             @AuthenticationPrincipal User user,
             @PathVariable Long id,
@@ -50,7 +53,7 @@ public class ApplicationController {
 
     // Відправити заявку
     @PatchMapping("/applications/{id}/submit")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<ApplicationDTO> submit(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
@@ -59,7 +62,7 @@ public class ApplicationController {
 
     // Мої заявки
     @GetMapping("/applications/my")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<List<ApplicationDTO>> getMy(
             @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(
@@ -74,7 +77,7 @@ public class ApplicationController {
      * щоб зрозуміти: відкривати форму для створення чи редагування.
      */
     @GetMapping("/applications/my/by-call/{callId}")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<ApplicationDTO> getMyByCall(
             @AuthenticationPrincipal User user,
             @PathVariable Long callId) {
@@ -107,7 +110,7 @@ public class ApplicationController {
             value = "/applications/{id}/documents/{documentType}",
             consumes = "multipart/form-data"
     )
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<DocumentDTO> uploadDocument(
             @AuthenticationPrincipal User user,
             @PathVariable Long id,
@@ -192,4 +195,4 @@ public class ApplicationController {
         return ResponseEntity.ok(appService.getByCall(callId));
     }
 }
-}
+

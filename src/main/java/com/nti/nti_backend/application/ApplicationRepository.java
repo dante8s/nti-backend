@@ -14,6 +14,18 @@ public interface ApplicationRepository
 
     List<Application> findByApplicantId(Long applicantId);
 
+    @Query("""
+            SELECT DISTINCT a FROM Application a
+            JOIN FETCH a.call c
+            JOIN FETCH c.program p
+            LEFT JOIN FETCH p.organization
+            LEFT JOIN FETCH a.productOwner
+            WHERE a.applicant.id = :applicantId
+            ORDER BY a.updatedAt DESC
+            """)
+    List<Application> findByApplicantIdWithDetails(
+            @Param("applicantId") Long applicantId);
+
     List<Application> findByStatus(ApplicationStatus status);
 
     List<Application> findByCallId(Long callId);
@@ -22,8 +34,7 @@ public interface ApplicationRepository
             Long applicantId, Long callId
     );
 
-
-    boolean existsByApplicantIdAndCallId(Long applicantId, Long callId);
+    // boolean existsByApplicantIdAndCallId(Long applicantId, Long callId);
 
     // Знайти конкретну заявку студента для виклику
     Optional<Application> findByApplicantIdAndCallId(Long applicantId, Long callId);
@@ -49,4 +60,21 @@ public interface ApplicationRepository
             LEFT JOIN FETCH p.organization
             """)
     List<Application> findAllForReportingExport();
+
+    @Query("""
+            SELECT COUNT(DISTINCT a.call.id) FROM Application a
+            WHERE a.status = :status
+            """)
+    long countDistinctCallsByStatus(@Param("status") ApplicationStatus status);
+
+    @Query("""
+            SELECT DISTINCT a FROM Application a
+            JOIN FETCH a.call c
+            JOIN FETCH c.program p
+            LEFT JOIN FETCH p.organization
+            JOIN FETCH a.applicant ap
+            WHERE ap.id IN :leaderIds
+            ORDER BY ap.id ASC, a.updatedAt DESC
+            """)
+    List<Application> findByApplicantIdInWithDetails(@Param("leaderIds") List<Long> leaderIds);
 }
