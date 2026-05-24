@@ -28,6 +28,15 @@ public interface ApplicationRepository
 
     List<Application> findByStatus(ApplicationStatus status);
 
+    @Query("""
+            SELECT DISTINCT a FROM Application a
+            JOIN FETCH a.applicant
+            JOIN FETCH a.call c
+            JOIN FETCH c.program
+            WHERE c.id = :callId
+            """)
+    List<Application> findByCallIdWithApplicant(@Param("callId") Long callId);
+
     List<Application> findByCallId(Long callId);
 
     boolean existsByApplicantIdAndCallId(

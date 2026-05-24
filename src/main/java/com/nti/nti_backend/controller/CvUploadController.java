@@ -10,6 +10,7 @@ import com.nti.nti_backend.team.TeamRepository;
 import com.nti.nti_backend.teamMember.TeamMemberRepository;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
+import com.nti.nti_backend.user.UserRepository;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
@@ -47,16 +48,19 @@ public class CvUploadController {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final UserRepository userRepository;
 
     public CvUploadController(
             StudentProfileService studentProfileService,
             TeamRepository teamRepository,
             TeamMemberRepository teamMemberRepository,
-            StudentProfileRepository studentProfileRepository) {
+            StudentProfileRepository studentProfileRepository,
+            UserRepository userRepository) {
         this.studentProfileService = studentProfileService;
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.studentProfileRepository = studentProfileRepository;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/{userId:\\d+}")
@@ -98,17 +102,18 @@ public class CvUploadController {
         if (authUser == null || authUser.getId() == null) {
             return ResponseEntity.status(401).build();
         }
-        Set<String> roleNames = authUser.getRoles().stream()
+        User user = userRepository.findById(authUser.getId()).orElse(authUser);
+        Set<String> roleNames = user.getRoles().stream()
                 .map(Role::name)
                 .collect(Collectors.toSet());
         return ResponseEntity.ok(new ProfileSessionBrief(
-                authUser.getId(),
-                authUser.getName(),
-                authUser.getEmail(),
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
                 roleNames,
-                authUser.getAccountStatus().name(),
-                authUser.isEmailVerified(),
-                authUser.isOnboardingCompleted()
+                user.getAccountStatus().name(),
+                user.isEmailVerified(),
+                user.isOnboardingCompleted()
         ));
     }
 
@@ -136,8 +141,15 @@ public class CvUploadController {
         List<String> reminders = new ArrayList<>();
         if (!privileged) {
             if (!teamLeader) {
-                reminders.add(
-                        "Створіть команду й будьте її лідером (сторінка «Моя команда»).");
+                boolean teamMember =
+                        !teamRepository.findAcceptedTeamsByUserId(authUser.getId()).isEmpty();
+                if (teamMember) {
+                    reminders.add(
+                            "Ви учасник команди — подавати заявку на виклик може лише лідер.");
+                } else {
+                    reminders.add(
+                            "Створіть команду й будьте її лідером (сторінка «Моя команда»).");
+                }
             }
             if (!profileComplete) {
                 reminders.add(

@@ -141,13 +141,15 @@ public class ScoringController {
     @GetMapping("/calls/{callId}/applications")
     @PreAuthorize("hasAnyRole('EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<Map<String, Object>>> getCallApplications(@PathVariable Long callId) {
-        List<Map<String, Object>> queue = applicationRepository.findByCallId(callId)
+        List<Map<String, Object>> queue = applicationRepository.findByCallIdWithApplicant(callId)
                 .stream()
                 .map(app -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", app.getId());
                     row.put("status", app.getStatus() != null ? app.getStatus().name() : null);
                     row.put("applicantId", app.getApplicant() != null ? app.getApplicant().getId() : null);
+                    row.put("applicantEmail", app.getApplicant() != null ? app.getApplicant().getEmail() : null);
+                    row.put("applicantName", app.getApplicant() != null ? app.getApplicant().getName() : null);
                     String programName = null;
                     if (app.getCall() != null && app.getCall().getProgram() != null) {
                         programName = app.getCall().getProgram().getName();
