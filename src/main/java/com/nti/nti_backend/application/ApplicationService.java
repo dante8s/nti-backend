@@ -4,6 +4,7 @@ import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.call.Call;
 import com.nti.nti_backend.call.CallRepository;
 import com.nti.nti_backend.team.TeamRepository;
+import com.nti.nti_backend.teamMember.TeamMemberRepository;
 import com.nti.nti_backend.email.EmailService;
 import com.nti.nti_backend.program.ProgramType;
 import com.nti.nti_backend.user.Role;
@@ -43,6 +44,7 @@ public class ApplicationService {
     private final ApplicationRepository appRepository;
     private final CallRepository callRepository;
     private final TeamRepository teamRepository;
+    private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
     private final EmailService emailService;
@@ -151,6 +153,7 @@ public class ApplicationService {
 
         Application app = findAndCheckOwner(appId, userId);
         assertApplicantIsTeamLeader(app.getApplicant());
+        assertTeamIsFullyAssembled(app.getApplicant());
 
         validateTransition(
                 app.getStatus(), ApplicationStatus.SUBMITTED
@@ -567,5 +570,20 @@ public class ApplicationService {
             throw new RuntimeException(
                     "Подавати заявку на виклик може лише лідер команди");
         }
+    }
+
+    /** Команда повністю укомплектована (кількість ACCEPTED == maxCapacity). */
+    private void assertTeamIsFullyAssembled(User applicant) {
+        if (applicant.hasRole(Role.SUPER_ADMIN)) {
+            return;
+        }
+        teamRepository.findByLeader_Id(applicant.getId()).ifPresent(team -> {
+            long accepted = teamMemberRepository.countAcceptedMembers(team.getId());
+            if (accepted < team.getMaxCapacity()) {
+                throw new RuntimeException(
+                        "Команда не укомплектована: потрібно " + team.getMaxCapacity()
+                        + " учасник(ів), зараз " + accepted + ".");
+            }
+        });
     }
 }

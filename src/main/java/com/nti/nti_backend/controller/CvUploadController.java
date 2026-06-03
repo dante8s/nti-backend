@@ -136,8 +136,19 @@ public class CvUploadController {
                 studentProfileRepository.findByUser_Id(authUser.getId())
                         .map(StudentProfile::isProfileComplete)
                         .orElse(false);
+
+        // Перевірка: команда укомплектована (кількість ACCEPTED == maxCapacity)
+        boolean teamFull = false;
+        if (teamLeader) {
+            var team = teamRepository.findByLeader_Id(authUser.getId()).orElse(null);
+            if (team != null) {
+                long accepted = teamMemberRepository.countAcceptedMembers(team.getId());
+                teamFull = accepted >= team.getMaxCapacity();
+            }
+        }
+
         boolean suggestsReadyForCallFlow =
-                privileged || (teamLeader && profileComplete);
+                privileged || (teamLeader && profileComplete && teamFull);
         List<String> reminders = new ArrayList<>();
         if (!privileged) {
             if (!teamLeader) {
@@ -151,6 +162,10 @@ public class CvUploadController {
                             "Створіть команду й будьте її лідером (сторінка «Моя команда»).");
                 }
             }
+            if (teamLeader && !teamFull) {
+                reminders.add(
+                        "Команда ще не укомплектована. Потрібно набрати максимальну кількість учасників.");
+            }
             if (!profileComplete) {
                 reminders.add(
                         "Завершіть студентський профіль і завантажте CV.");
@@ -159,6 +174,7 @@ public class CvUploadController {
         return ResponseEntity.ok(new CallApplicationEligibility(
                 profileComplete,
                 teamLeader,
+                teamFull,
                 suggestsReadyForCallFlow,
                 List.copyOf(reminders)));
     }
