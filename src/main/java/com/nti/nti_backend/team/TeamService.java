@@ -1,6 +1,5 @@
 package com.nti.nti_backend.team;
 
-
 import com.nti.nti_backend.teamMember.TeamMember;
 import com.nti.nti_backend.teamMember.TeamMemberRepository;
 import com.nti.nti_backend.user.User;
