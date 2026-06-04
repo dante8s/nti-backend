@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +55,7 @@ public class ReportingController {
     // Returns the XLSX file as a binary download — browser prompts "Save As".
 
     @GetMapping("/export/{callId}")
-    @PreAuthorize("hasAnyRole('SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<byte[]> exportEvaluatorReport(@PathVariable Long callId) {
         try {
             byte[] xlsx = reportingService.generateEvaluationReport(callId);
@@ -79,10 +80,25 @@ public class ReportingController {
     // ── GET /api/reporting/stats ──────────────────────────────────────────────
     // Vue "адмін дашборд" calls this on page load to populate the stat cards.
     @GetMapping("/stats")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Map<String , Object>> getAdminStats() {
         Map<String , Object> stats = reportingService.getAdminStats();
         return ResponseEntity.ok(stats);
+    }
+
+    @GetMapping("/teams")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<Map<String, Object>> getTeamsReport(
+            @RequestParam(required = false) Long callId,
+            @RequestParam(required = false) String program,
+            @RequestParam(required = false) String applicationStatus,
+            @RequestParam(required = false) Boolean linkedToCall,
+            @RequestParam(required = false) Boolean winnerOnly,
+            @RequestParam(required = false) Integer minMembers,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(reportingService.getTeamsReport(
+                callId, program, applicationStatus, linkedToCall, winnerOnly, minMembers, page, size));
     }
 
     @GetMapping("/dashboard/student")
@@ -109,16 +125,29 @@ public class ReportingController {
      * Експорт списку заявок за фільтром: CSV, XLSX, PDF, DOCX.
      */
     @GetMapping("/export")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','SUPER_EVALUATOR','EVALUATOR')")
-    public ResponseEntity<byte[]> exportApplications(
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<byte[]> exportReport(
             @RequestParam String format,
+            @RequestParam(defaultValue = "applications") String reportType,
             @RequestParam(required = false) Long callId,
             @RequestParam(required = false) String program,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String role) {
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String applicationStatus,
+            @RequestParam(required = false) Boolean linkedToCall,
+            @RequestParam(required = false) Boolean winnerOnly,
+            @RequestParam(required = false) Integer minMembers) {
         try {
-            byte[] body = reportingService.exportApplicationsReport(
-                    format, callId, program, status, role);
+            String type = reportType == null ? "applications" : reportType.trim().toLowerCase(Locale.ROOT);
+            byte[] body = switch (type) {
+                case "teams" -> reportingService.exportTeamsReport(
+                        format, callId, program,
+                        applicationStatus != null ? applicationStatus : status,
+                        linkedToCall, winnerOnly, minMembers);
+                case "applications" -> reportingService.exportApplicationsReport(
+                        format, callId, program, status, role);
+                default -> throw new IllegalArgumentException("Unsupported reportType: " + reportType);
+            };
             String ext = format == null ? "bin" : format.trim().toLowerCase();
             MediaType mediaType = switch (ext) {
                 case "csv" -> MediaType.parseMediaType("text/csv; charset=UTF-8");
@@ -129,7 +158,8 @@ public class ReportingController {
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
                 default -> MediaType.APPLICATION_OCTET_STREAM;
             };
-            String filename = "nti_applications_export_"
+            String prefix = "teams".equals(type) ? "nti_teams_export_" : "nti_applications_export_";
+            String filename = prefix
                     + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm"))
                     + "." + ext;
             return ResponseEntity.ok()

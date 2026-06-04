@@ -36,4 +36,11 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
                WHERE m.team = t AND m.inviteStatus = 'ACCEPTED') >= :minSize
         """)
     List<Team> findTeamsWithMinimumSize(@Param("minSize") int minSize);
+
+    @Query("""
+            SELECT DISTINCT t FROM Team t
+            LEFT JOIN FETCH t.leader
+            ORDER BY t.id ASC
+            """)
+    List<Team> findAllForReporting();
 }

@@ -6,6 +6,7 @@ import java.util.List;
 public record CallApplicationEligibility(
         boolean profileComplete,
         boolean teamLeader,
+        boolean teamFull,
         boolean suggestsReadyForCallFlow,
         List<String> remindersUk
 ) {

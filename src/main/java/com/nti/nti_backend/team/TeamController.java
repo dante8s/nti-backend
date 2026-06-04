@@ -3,6 +3,7 @@ package com.nti.nti_backend.team;
 import com.nti.nti_backend.teamMember.TeamMember;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
+import com.nti.nti_backend.user.UserRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,9 +17,11 @@ import java.util.Map;
 public class TeamController {
 
     private final TeamService teamService;
+    private final UserRepository userRepository;
 
-    public TeamController(TeamService teamService) {
+    public TeamController(TeamService teamService, UserRepository userRepository) {
         this.teamService = teamService;
+        this.userRepository = userRepository;
     }
 
     @PostMapping
@@ -49,6 +52,20 @@ public class TeamController {
         }
     }
 
+
+    @GetMapping("/user/{userId}/removal-notice")
+    @PreAuthorize("hasAnyRole('STUDENT' , 'ADMIN' , 'SUPER_ADMIN')")
+    public ResponseEntity<TeamRemovalNotice> getRemovalNotice(
+        @AuthenticationPrincipal User authUser , 
+        @PathVariable Long userId ) {
+            if  (!canActForUser(authUser , userId)) {
+                return ResponseEntity.status(403).build();
+            }
+            return teamService.getRemovalNoticeForUser(userId)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+        }
+
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN','EVALUATOR','SUPER_EVALUATOR')")
     public ResponseEntity<TeamResponse> getTeamForUser(
@@ -64,6 +81,21 @@ public class TeamController {
         } catch (IllegalStateException e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    /** Вхідні запрошення поточного користувача (id з JWT, без помилок localStorage). */
+    @GetMapping("/me/invites")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<TeamMemberResponse>> getMyPendingInvites(
+            @AuthenticationPrincipal User authUser) {
+        if (authUser == null || authUser.getId() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        List<TeamMemberResponse> response = teamService.getPendingInvitesForUser(authUser.getId())
+                .stream()
+                .map(this::toMemberResponse)
+                .toList();
+        return ResponseEntity.ok(response);
     }
 
     /** Declare before `/{teamId}` so `/invites/...` is not mistaken for team id (some setups). */
@@ -104,15 +136,52 @@ public class TeamController {
     public ResponseEntity<?> inviteMember(
             @AuthenticationPrincipal User authUser,
             @PathVariable Long teamId,
-            @RequestParam Long userId
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String email
     ) {
         try {
             Team team = teamService.getTeamWithMembers(teamId);
             if (!isAdmin(authUser) && !team.getLeader().getId().equals(authUser.getId())) {
                 return ResponseEntity.status(403).build();
             }
-            TeamMember member = teamService.inviteMember(teamId, userId);
+            Long targetUserId = resolveInviteTargetUserId(userId, email);
+            TeamMember member = teamService.inviteMember(teamId, targetUserId);
             return ResponseEntity.ok(toMemberResponse(member));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+
+    @DeleteMapping("/{teamId}")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> deleteTeam(
+            @AuthenticationPrincipal User authUser,
+            @PathVariable Long teamId) {
+        try {
+            Team team = teamService.getTeamWithMembers(teamId);
+            if (!isAdmin(authUser) && !team.getLeader().getId().equals(authUser.getId())) {
+                return ResponseEntity.status(403)
+                        .body(Map.of("message", "Лише лідер команди може видалити команду."));
+            }
+            teamService.deleteTeam(teamId, authUser.getId(), isAdmin(authUser));
+            return ResponseEntity.noContent().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{teamId}/members/{memberUserId}")
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> removeMember(
+        @AuthenticationPrincipal User authUser , 
+        @PathVariable Long teamId , 
+        @PathVariable Long memberUserId
+    ){
+        try {
+            teamService.removeMember(
+                    teamId, memberUserId, authUser.getId(), isAdmin(authUser));
+            return ResponseEntity.noContent().build();
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
@@ -140,6 +209,8 @@ public class TeamController {
     private TeamResponse toResponse(Team team) {
         List<TeamMemberResponse> members = team.getMembers()
                 .stream()
+                .filter(m -> m.getInviteStatus() == TeamMember.InviteStatus.PENDING
+                        || m.getInviteStatus() == TeamMember.InviteStatus.ACCEPTED)
                 .map(this::toMemberResponse)
                 .toList();
 
@@ -156,23 +227,40 @@ public class TeamController {
 
     private TeamMemberResponse toMemberResponse(TeamMember member) {
         var user = member.getUser();
-        String displayName = "";
+        String displayName = "—";
+        String email = null;
         if (user != null) {
+            email = user.getEmail();
             String name = user.getName();
             displayName = (name != null && !name.isBlank())
                     ? name
                     : ("Користувач #" + user.getId());
-        } else {
-            displayName = "—";
         }
+        String teamName = member.getTeam() != null ? member.getTeam().getName() : null;
         return new TeamMemberResponse(
                 member.getId(),
                 member.getTeam().getId(),
                 member.getUser().getId(),
                 member.getRole().name(),
                 member.getInviteStatus().name(),
-                displayName
+                displayName,
+                email,
+                teamName
         );
+    }
+
+    private Long resolveInviteTargetUserId(Long userId, String email) {
+        if (userId != null && userId > 0) {
+            return userId;
+        }
+        if (email != null && !email.isBlank()) {
+            return userRepository.findByEmail(email.trim().toLowerCase())
+                    .or(() -> userRepository.findByEmail(email.trim()))
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Користувача з email «" + email.trim() + "» не знайдено"))
+                    .getId();
+        }
+        throw new IllegalStateException("Вкажіть ID користувача або email");
     }
 
     public record CreateTeamRequest(
@@ -201,7 +289,9 @@ public class TeamController {
             Long userId,
             String role,
             String inviteStatus,
-            String memberDisplayName
+            String memberDisplayName,
+            String memberEmail,
+            String teamName
     ) {
     }
 

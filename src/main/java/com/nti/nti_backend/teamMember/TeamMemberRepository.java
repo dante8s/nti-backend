@@ -11,6 +11,14 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
     List<TeamMember> findByUser_IdAndInviteStatus(Long userId, TeamMember.InviteStatus status);
 
+     @Query("""
+        SELECT m FROM TeamMember m 
+        JOIN FETCH m.team 
+        WHERE m.user.id = :userId AND m.inviteStatus = 'REMOVED'
+        ORDER BY m.respondedAt DESC , m.id DESC      
+        """)
+    List<TeamMember> findRemovedMembershipsForUser(@Param("userId") Long userId);
+
     @Query("""
             SELECT DISTINCT m FROM TeamMember m
             JOIN FETCH m.team
@@ -25,11 +33,24 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
     List<TeamMember> findByTeam_Id(Long teamId);
 
+    void deleteByTeam_Id(Long teamId);
+
     boolean existsByTeam_IdAndUser_Id(Long teamId, Long userId);
 
     Optional<TeamMember> findByTeam_IdAndUser_Id(Long teamId, Long userId);
 
     boolean existsByUser_IdAndInviteStatus(Long userId, TeamMember.InviteStatus status);
+
+    /** Кількість ACCEPTED-членств користувача в інших командах (не {@code teamId}). */
+    @Query("""
+            SELECT COUNT(m) FROM TeamMember m
+            WHERE m.user.id = :userId
+              AND m.inviteStatus = 'ACCEPTED'
+              AND m.team.id <> :teamId
+            """)
+    long countAcceptedInOtherTeam(
+            @Param("userId") Long userId,
+            @Param("teamId") Long teamId);
 
     @Query("""
         SELECT COUNT(m) FROM TeamMember m
