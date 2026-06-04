@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -89,6 +90,13 @@ public class ApplicationService {
                         new RuntimeException("Виклик не знайдено")
                 );
 
+        if (call.getDeadline() != null
+                && LocalDateTime.now().isAfter(call.getDeadline())) {
+            throw new RuntimeException(
+                    "Термін подачі заявок для цього виклику закінчився"
+            );
+        }
+
         Application app = Application.builder()
                 .call(call)
                 .applicant(applicant)
@@ -154,6 +162,14 @@ public class ApplicationService {
         Application app = findAndCheckOwner(appId, userId);
         assertApplicantIsTeamLeader(app.getApplicant());
         assertTeamIsFullyAssembled(app.getApplicant());
+
+        Call call = app.getCall();
+        if (call.getDeadline() != null
+                && LocalDateTime.now().isAfter(call.getDeadline())) {
+            throw new RuntimeException(
+                    "Термін подачі заявок для цього виклику закінчився"
+            );
+        }
 
         validateTransition(
                 app.getStatus(), ApplicationStatus.SUBMITTED
@@ -534,7 +550,9 @@ public class ApplicationService {
                 productOwnerName,
                 a.getFormData(),
                 a.getCreatedAt(),
-                a.getUpdatedAt()
+                a.getUpdatedAt(),
+                a.getApplicant() != null ? a.getApplicant().getName() : null,
+                a.getApplicant() != null ? a.getApplicant().getEmail() : null
         );
     }
 

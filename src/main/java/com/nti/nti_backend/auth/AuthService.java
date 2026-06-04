@@ -43,6 +43,12 @@ public class AuthService {
             throw new RuntimeException("Потрібна згода на обробку даних");
         }
 
+        if (!request.email().toLowerCase().endsWith("@student.ukf.sk")) {
+            throw new RuntimeException(
+                    "Реєстрація дозволена лише для адрес @student.ukf.sk"
+            );
+        }
+
         for (String role : request.roles()) {
             if (!ALLOWED_ROLES.contains(role)) {
                 throw new RuntimeException("Недозволена роль: " + role);
