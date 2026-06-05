@@ -1,6 +1,7 @@
 
 volumes:
   nti:
+  redis-data:
 
 services:
   nti_db:
@@ -14,6 +15,14 @@ services:
       - nti:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+  redis:
+    image: redis:7-alpine
+    container_name: redis-nti
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel warning
 
 
 

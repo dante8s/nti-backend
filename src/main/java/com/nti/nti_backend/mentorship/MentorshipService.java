@@ -3,6 +3,7 @@ package com.nti.nti_backend.mentorship;
 
 import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.application.ApplicationRepository;
+import com.nti.nti_backend.application.ApplicationStatus;
 import com.nti.nti_backend.mentorship.dto.*;
 import com.nti.nti_backend.mentorship.entity.Consultation;
 import com.nti.nti_backend.mentorship.entity.Mentorship;
@@ -62,6 +63,12 @@ public class MentorshipService {
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Application not found: " + dto.getApplicationId()
                     ));
+
+            if (application.getStatus() != ApplicationStatus.APPROVED) {
+                throw new ConflictException(
+                        "Mentorship can only be assigned to approved application"
+                );
+            }
 
             boolean alreadyExists = mentorshipRepository
                     .existsByMentorIdAndApplication_IdAndStatus(

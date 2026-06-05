@@ -95,7 +95,7 @@ public class OrganizationService {
 
         OrgMember owner = OrgMember.builder()
                 .organization(org)
-                .user(getCurrentUser())
+                .user(currentUser)
                 .role(OrgMemberRole.OWNER)
                 .build();
 
@@ -125,14 +125,18 @@ public class OrganizationService {
     public OrganizationResponseDTO update(UUID id, OrganizationRequestDTO dto) {
         Organization org = orgRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + id));
-        Long currentUserId = getCurrentUser().getId();
 
-        OrgMember membership = memberRepository
-                .findByOrganizationIdAndUserId(id, currentUserId)
-                .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
+        User currentUser = getCurrentUser();
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
 
-        if (membership.getRole() != OrgMemberRole.OWNER) {
-            throw new ConflictException("Only OWNER can edit this organization");
+        if (!isAdmin) {
+            OrgMember membership = memberRepository
+                    .findByOrganizationIdAndUserId(id, currentUser.getId())
+                    .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
+
+            if (membership.getRole() != OrgMemberRole.OWNER) {
+                throw new ConflictException("Only OWNER can edit this organization");
+            }
         }
 
         if (!org.getIco().equals(dto.getIco()) && orgRepository.existsByIco(dto.getIco())) {
@@ -157,14 +161,17 @@ public class OrganizationService {
         Organization org = orgRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + id));
 
-        Long currentUserId = getCurrentUser().getId();
+        User currentUser = getCurrentUser();
+        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
 
-        OrgMember membership = memberRepository
-                .findByOrganizationIdAndUserId(id, currentUserId)
-                .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
+        if (!isAdmin) {
+            OrgMember membership = memberRepository
+                    .findByOrganizationIdAndUserId(id, currentUser.getId())
+                    .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
 
-        if (membership.getRole() != OrgMemberRole.OWNER) {
-            throw new ConflictException("Only OWNER can remove this organization");
+            if (membership.getRole() != OrgMemberRole.OWNER) {
+                throw new ConflictException("Only OWNER can remove this organization");
+            }
         }
 
         orgRepository.delete(org);
@@ -280,7 +287,7 @@ public class OrganizationService {
                     .email(email)
                     .name("")
                     .password("")
-                    .roles(Set.of(Role.FIRM_USER))
+                    .roles(Set.of(Role.FIRM))
                     .emailVerified(true)
                     .enabled(false)
                     .accountStatus(AccountStatus.PENDING)
@@ -317,12 +324,15 @@ public class OrganizationService {
 
         Long currentUserId = getCurrentUser().getId();
         boolean isAdmin = getCurrentUser().hasRole(Role.ADMIN);
-        OrgMember requestingMember = memberRepository
-                .findByOrganizationIdAndUserId(orgId, currentUserId)
-                .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
 
-        if (requestingMember.getRole() != OrgMemberRole.OWNER && !isAdmin) {
-            throw new ConflictException("Only the OWNER or ADMIN can remove members from this organization");
+        if (!isAdmin) {
+            OrgMember requestingMember = memberRepository
+                    .findByOrganizationIdAndUserId(orgId, currentUserId)
+                    .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
+
+            if (requestingMember.getRole() != OrgMemberRole.OWNER && !isAdmin) {
+                throw new ConflictException("Only the OWNER or ADMIN can remove members from this organization");
+            }
         }
 
         OrgMember memberToRemove = memberRepository.findById(memberId).orElseThrow(
@@ -463,17 +473,24 @@ public class OrganizationService {
     public ProgramBRequirementsDTO uploadBudget(
             Long programId, MultipartFile file, User currentUser
     ) {
-        if (!currentUser.hasRole(Role.FIRM)) {
-            throw new ConflictException("Only  organization OWNER can upload attachments");
-        }
-
         Program program = programRepository.findById(programId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Program not found with id: " + programId));
-        if (program.getType() != ProgramType.PROGRAM_B) {
-            throw new ConflictException(
-                    "Budget only applies to Program B"
-            );
+                        "Program not found with id: " + programId
+                ));
+        if (program.getType() !=  ProgramType.PROGRAM_B) {
+            throw new ConflictException("Budget only applies to Program B");
+        }
+
+        boolean ownsProgram = memberRepository
+                .findAllByUserId(currentUser.getId())
+                .stream()
+                .filter(m -> m.getRole() == OrgMemberRole.OWNER)
+                .anyMatch(m -> program.getOrganization() != null
+                && m.getOrganization().getId()
+                        .equals(program.getOrganization().getId()));
+
+        if (!ownsProgram && !currentUser.hasRole(Role.ADMIN)) {
+            throw new ConflictException("You do not own this Program B");
         }
 
         String path = saveFile(file, programId, "budget");
@@ -481,7 +498,8 @@ public class OrganizationService {
                 .findByProgramId(programId)
                 .orElse(ProgramBRequirements.builder()
                         .program(program)
-                        .build());
+                        .build()
+                );
         req.setBudgetName(file.getOriginalFilename());
         req.setBudgetPath(path);
 
@@ -572,7 +590,6 @@ public class OrganizationService {
     private void checkFileAccess(ProgramBRequirements req, User currentUser) {
         if (currentUser.hasRole(Role.ADMIN)) return;
         if (currentUser.hasRole(Role.FIRM)
-                || currentUser.hasRole(Role.FIRM_USER)
         ) {
             boolean ownsOrg = memberRepository
                     .findAllByUserId(currentUser.getId())

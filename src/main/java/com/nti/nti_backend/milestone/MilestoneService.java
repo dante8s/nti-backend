@@ -361,8 +361,7 @@ public class MilestoneService {
         boolean hasAccess = currentUser.hasRole(Role.ADMIN)
                 || currentUser.hasRole(Role.STUDENT)
                 || currentUser.hasRole(Role.MENTOR)
-                || currentUser.hasRole(Role.FIRM)
-                ||  currentUser.hasRole(Role.FIRM_USER);
+                || currentUser.hasRole(Role.FIRM);
 
         if (!hasAccess) {
             throw new ConflictException(

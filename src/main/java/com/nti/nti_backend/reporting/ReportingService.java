@@ -780,7 +780,7 @@ public class ReportingService {
                         return false;
                     }
                 } else if ("company".equals(rf)) {
-                    if (!roles.contains(Role.FIRM) && !roles.contains(Role.FIRM_USER)) {
+                    if (!roles.contains(Role.FIRM)) {
                         return false;
                     }
                 } else if ("evaluator".equals(rf)) {

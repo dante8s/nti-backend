@@ -228,8 +228,8 @@ public class AuthService {
         user.setName(request.name());
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setInviteToken(null);
-        user.setEnabled(true);
-        user.setAccountStatus(AccountStatus.APPROVED);
+        user.setEnabled(false);
+        user.setAccountStatus(AccountStatus.PENDING);
         userRepository.save(user);
 
         return "Реєстрацію завершено. Ви можете увійти в систему.";

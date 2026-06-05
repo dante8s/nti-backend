@@ -12,7 +12,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,7 +25,6 @@ import java.util.UUID;
 public class OrganizationController {
 
     private final OrganizationService orgService;
-    private final OrganizationRepository organizationRepository;
 
     @PostMapping("/organizations")
     public ResponseEntity<OrganizationResponseDTO> create(
@@ -94,7 +92,7 @@ public class OrganizationController {
             @RequestBody InviteOrgMemberRequest request
             ) {
         orgService.inviteMember(id, request);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 
     // PATCH /api/organizations/{id}/transfer-ownership/{memberId}
@@ -132,7 +130,7 @@ public class OrganizationController {
     }
 
     @PostMapping("/program-b-requirements/{programId}/specification")
-    @PreAuthorize("hasAnyRole('FIRM', 'FIRM_USER')")
+    @PreAuthorize("hasAnyRole('FIRM')")
     public ResponseEntity<ProgramBRequirementsDTO> uploadSpec(
             @PathVariable Long programId,
             @RequestParam("file") MultipartFile file,
@@ -142,7 +140,7 @@ public class OrganizationController {
     }
 
     @PostMapping("/program-b-requirements/{programId}/budget")
-    @PreAuthorize("hasAnyRole('FIRM', 'FIRM_USER')")
+    @PreAuthorize("hasAnyRole('FIRM')")
     public ResponseEntity<ProgramBRequirementsDTO> uploadBudget(
             @PathVariable Long programId,
             @RequestParam("file") MultipartFile file,
