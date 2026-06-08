@@ -45,8 +45,9 @@ public class TeamController {
             team.setLeader(leader);
 
             Team saved = teamService.createTeam(team);
-            Team full = teamService.getTeamWithMembers(saved.getId());
-            return ResponseEntity.ok(toResponse(full));
+//            Team full = teamService.getTeamWithMembers(saved.getId());
+//            return ResponseEntity.ok(toResponse(full));
+            return ResponseEntity.ok(teamService.getTeamResponseById(saved.getId()));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
@@ -75,9 +76,7 @@ public class TeamController {
             return ResponseEntity.status(403).build();
         }
         try {
-            Team team = teamService.getTeamForUser(userId);
-            Team full = teamService.getTeamWithMembers(team.getId());
-            return ResponseEntity.ok(toResponse(full));
+            return ResponseEntity.ok(teamService.getTeamResponseForUser(userId));
         } catch (IllegalStateException e) {
             return ResponseEntity.notFound().build();
         }
@@ -91,11 +90,7 @@ public class TeamController {
         if (authUser == null || authUser.getId() == null) {
             return ResponseEntity.status(401).build();
         }
-        List<TeamMemberResponse> response = teamService.getPendingInvitesForUser(authUser.getId())
-                .stream()
-                .map(this::toMemberResponse)
-                .toList();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(teamService.getPendingInviteResponsesForUser(authUser.getId()));
     }
 
     /** Declare before `/{teamId}` so `/invites/...` is not mistaken for team id (some setups). */
@@ -107,11 +102,7 @@ public class TeamController {
         if (!canActForUser(authUser, userId)) {
             return ResponseEntity.status(403).build();
         }
-        List<TeamMemberResponse> response = teamService.getPendingInvitesForUser(userId)
-                .stream()
-                .map(this::toMemberResponse)
-                .toList();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(teamService.getPendingInviteResponsesForUser(userId));
     }
 
     @GetMapping("/{teamId}")
@@ -125,7 +116,7 @@ public class TeamController {
                     && !isCommissionViewer(authUser)) {
                 return ResponseEntity.status(403).build();
             }
-            return ResponseEntity.ok(toResponse(team));
+            return ResponseEntity.ok(teamService.getTeamResponseById(teamId));
         } catch (IllegalStateException e) {
             return ResponseEntity.notFound().build();
         }
@@ -146,7 +137,7 @@ public class TeamController {
             }
             Long targetUserId = resolveInviteTargetUserId(userId, email);
             TeamMember member = teamService.inviteMember(teamId, targetUserId);
-            return ResponseEntity.ok(toMemberResponse(member));
+            return ResponseEntity.ok(teamService.toMemberResponse(member));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
@@ -200,54 +191,12 @@ public class TeamController {
         }
         try {
             TeamMember member = teamService.respondToInvitation(teamId, userId, accepted);
-            return ResponseEntity.ok(toMemberResponse(member));
+            return ResponseEntity.ok(teamService.toMemberResponse(member));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
 
-    private TeamResponse toResponse(Team team) {
-        List<TeamMemberResponse> members = team.getMembers()
-                .stream()
-                .filter(m -> m.getInviteStatus() == TeamMember.InviteStatus.PENDING
-                        || m.getInviteStatus() == TeamMember.InviteStatus.ACCEPTED)
-                .map(this::toMemberResponse)
-                .toList();
-
-        return new TeamResponse(
-                team.getId(),
-                team.getName(),
-                team.getLeader().getId(),
-                team.getMaxCapacity(),
-                team.getDesciption(),
-                team.getCompetencies(),
-                members
-        );
-    }
-
-    private TeamMemberResponse toMemberResponse(TeamMember member) {
-        var user = member.getUser();
-        String displayName = "—";
-        String email = null;
-        if (user != null) {
-            email = user.getEmail();
-            String name = user.getName();
-            displayName = (name != null && !name.isBlank())
-                    ? name
-                    : ("Користувач #" + user.getId());
-        }
-        String teamName = member.getTeam() != null ? member.getTeam().getName() : null;
-        return new TeamMemberResponse(
-                member.getId(),
-                member.getTeam().getId(),
-                member.getUser().getId(),
-                member.getRole().name(),
-                member.getInviteStatus().name(),
-                displayName,
-                email,
-                teamName
-        );
-    }
 
     private Long resolveInviteTargetUserId(Long userId, String email) {
         if (userId != null && userId > 0) {
@@ -272,28 +221,9 @@ public class TeamController {
     ) {
     }
 
-    public record TeamResponse(
-            Long id,
-            String name,
-            Long leaderId,
-            Integer maxCapacity,
-            String description,
-            String competencies,
-            List<TeamMemberResponse> members
-    ) {
-    }
 
-    public record TeamMemberResponse(
-            Long id,
-            Long teamId,
-            Long userId,
-            String role,
-            String inviteStatus,
-            String memberDisplayName,
-            String memberEmail,
-            String teamName
-    ) {
-    }
+
+
 
     private boolean canActForUser(User authUser, Long userId) {
         return authUser != null && userId != null && (

@@ -3,6 +3,7 @@ package com.nti.nti_backend.milestone.dto;
 import com.nti.nti_backend.milestone.entity.MilestoneStatus;
 import lombok.Builder;
 import lombok.Data;
+import lombok.extern.jackson.Jacksonized;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -10,6 +11,7 @@ import java.util.UUID;
 
 @Data
 @Builder
+@Jacksonized
 public class MilestoneResponseDTO {
 
     private UUID id;

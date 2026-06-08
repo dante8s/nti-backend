@@ -3,6 +3,8 @@ package com.nti.nti_backend.application;
 import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.call.Call;
 import com.nti.nti_backend.call.CallRepository;
+import com.nti.nti_backend.organization.entity.Organization;
+import com.nti.nti_backend.organization.repository.OrgMemberRepository;
 import com.nti.nti_backend.team.TeamRepository;
 import com.nti.nti_backend.teamMember.TeamMemberRepository;
 import com.nti.nti_backend.email.EmailService;
@@ -23,12 +25,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +49,7 @@ public class ApplicationService {
     private final DocumentRepository documentRepository;
     private final EmailService emailService;
     private final AuditService auditService;
+    private final OrgMemberRepository memberRepository;
 
     private static final Map<ApplicationStatus,
             List<ApplicationStatus>> ALLOWED = Map.of(
@@ -67,6 +68,7 @@ public class ApplicationService {
     );
 
     // Створити draft
+    @CacheEvict(value = APPLICATIONS_MY, key = "#applicant.id")
     public ApplicationDTO createDraft(
             User applicant,
             CreateApplicationRequest request) {
@@ -109,6 +111,7 @@ public class ApplicationService {
     }
 
     // Оновити дані форми (тільки DRAFT або NEEDS_REVISION)
+    @CacheEvict(value = APPLICATIONS_MY, key = "#userId")
     public ApplicationDTO updateDraft(
             Long appId,
             Long userId,
@@ -148,6 +151,10 @@ public class ApplicationService {
     }
 
     // Відправити заявку
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_MY, key = "#userId"),
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true)
+    })
     public ApplicationDTO submit(
             Long appId, Long userId) {
 
@@ -353,6 +360,7 @@ public class ApplicationService {
         return "pdf";
     }
 
+    @Cacheable(value = APPLICATIONS_MY, key = "#userId")
     @Transactional(readOnly = true)
     public List<ApplicationDTO> getMyApplications(
             Long userId) {
@@ -360,7 +368,7 @@ public class ApplicationService {
                 .findByApplicantIdWithDetails(userId)
                 .stream()
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     // Одна заявка
@@ -397,11 +405,27 @@ public class ApplicationService {
         if (viewer.hasRole(Role.MENTOR)) {
             return true;
         }
+        if (viewer.hasRole(Role.FIRM)) {
+            if (app.getCall() != null &&
+                    app.getCall().getProgram() != null &&
+                    app.getCall().getProgram().getOrganization() != null) {
+
+                UUID orgId = app.getCall().getProgram().getOrganization().getId();
+
+                boolean isMember = memberRepository.findByOrganizationIdAndUserId(orgId, viewer.getId()).isPresent();
+
+                if (isMember) {
+                    return true;
+                }
+            }
+        }
+
         return viewer.hasRole(Role.STUDENT)
                 && app.getApplicant().getId().equals(viewer.getId());
     }
 
     // Тільки не-чернетки для адміна
+    @Cacheable(value = APPLICATIONS_ALL)
     public List<ApplicationDTO> getAll() {
         return appRepository.findAll()
                 .stream()
@@ -409,9 +433,13 @@ public class ApplicationService {
                         a.getStatus() != ApplicationStatus.DRAFT
                 )
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
+    })
     public ApplicationDTO changeStatus(
             Long appId,
             ApplicationStatus newStatus,
@@ -450,6 +478,11 @@ public class ApplicationService {
     }
 
     // set OWNER of the product
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
+    })
     @Transactional
     public ApplicationDTO setProductOwner(Long appId, Long userId, User currentUser) {
         Application app = appRepository.findById(appId)
@@ -469,11 +502,12 @@ public class ApplicationService {
         return toDTO(appRepository.save(app));
     }
 
+    @Cacheable(value = APPLICATIONS_CALL, key = "#callId")
     public List<ApplicationDTO> getByCall(Long callId) {
         return appRepository.findByCallId(callId)
                 .stream()
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     // Валідація переходу між статусами
@@ -532,6 +566,7 @@ public class ApplicationService {
                 organizationName,
                 productOwnerId,
                 productOwnerName,
+                a.getApplicant() != null ? a.getApplicant().getId() : null,
                 a.getFormData(),
                 a.getCreatedAt(),
                 a.getUpdatedAt()

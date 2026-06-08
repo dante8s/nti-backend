@@ -5,7 +5,12 @@ import com.nti.nti_backend.program.ProgramRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
 
 @Service
 @RequiredArgsConstructor
@@ -15,6 +20,7 @@ public class CallService {
     private final ProgramRepository programRepository;
 
     // Всі відкриті виклики по програмі
+    @Cacheable(value = CALLS_OPEN, key = "#programId")
     public List<CallDTO> getOpenByProgram(Long programId) {
         return callRepository
                 .findByProgramIdAndStatus(
@@ -22,19 +28,21 @@ public class CallService {
                 )
                 .stream()
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     // Всі відкриті виклики взагалі
+    @Cacheable(value = CALLS_OPEN, key = "'all'")
     public List<CallDTO> getAllOpen() {
         return callRepository
                 .findByStatus(CallStatus.OPEN)
                 .stream()
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     // Один виклик по id
+    @Cacheable(value = CALL, key = "#id")
     public CallDTO getById(Long id) {
         return callRepository.findById(id)
                 .map(this::toDTO)
@@ -44,6 +52,10 @@ public class CallService {
     }
 
     // Створити виклик (ADMIN)
+    @Caching(evict = {
+            @CacheEvict(value = CALLS_OPEN, allEntries = true),
+            @CacheEvict(value = CALLS_BY_PROGRAM, key = "#programId")
+    })
     public CallDTO create(
             Long programId,
             CreateCallRequest request) {
@@ -62,6 +74,10 @@ public class CallService {
     }
 
     // Закрити виклик (ADMIN)
+    @Caching(evict = {
+            @CacheEvict(value = CALLS_OPEN, allEntries = true),
+            @CacheEvict(value = CALL, key = "#id")
+    })
     public void close(Long id) {
         Call call = callRepository.findById(id)
                 .orElseThrow(() ->
@@ -72,11 +88,15 @@ public class CallService {
     }
 
     // Get all calls for Program
+    @Cacheable(
+            value = CALLS_BY_PROGRAM,
+            key = "#programId"
+    )
     public List<CallDTO> getByProgram(Long programId) {
         return callRepository.findByProgramId(programId)
                 .stream()
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private CallDTO toDTO(Call c) {

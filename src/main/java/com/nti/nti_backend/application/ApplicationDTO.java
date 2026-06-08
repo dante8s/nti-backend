@@ -15,6 +15,7 @@ public record ApplicationDTO(
         String organizationName,
         Long productOwnerId,
         String productOwnerName,
+        Long applicantId,
         String formData,        // JSON-рядок з даними форми
         LocalDateTime createdAt,
         LocalDateTime updatedAt

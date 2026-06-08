@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
 
 @Service
 @Transactional
@@ -25,6 +27,11 @@ public class EvaluationService {
         this.applicationRepository = applicationRepository;
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = EVALUATIONS, key = "#evaluation.application.id"),
+            @CacheEvict(value = SCORE_WEIGHTED, key = "#evaluation.application.id"),
+            @CacheEvict(value = SCORE_AVERAGE, key = "#evaluation.application.id")
+    })
     public Evaluation submitScore(Evaluation evaluation) {
         Long appId = evaluation.getApplication().getId();
         Long evaluatorId = evaluation.getEvaluator().getId();
@@ -67,11 +74,13 @@ public class EvaluationService {
         return evaluationRepository.findByApplication_IdAndEvaluator_Id(applicationId, evaluatorId);
     }
 
+    @Cacheable(value = EVALUATIONS, key = "#applicationId")
     @Transactional(readOnly = true)
     public List<Evaluation> getAllScoresForApplication(Long applicationId) {
         return evaluationRepository.findByApplication_Id(applicationId);
     }
 
+    @Cacheable(value = SCORE_WEIGHTED, key = "#applicationId")
     @Transactional(readOnly = true)
     public Double getWeightedAverageScore(Long applicationId) {
         return evaluationRepository
@@ -79,6 +88,7 @@ public class EvaluationService {
                 .orElse(null);
     }
 
+    @Cacheable(value = SCORE_AVERAGE, key = "#applicationId")
     @Transactional(readOnly = true)
     public Double getAverageScore(Long applicationId) {
         return evaluationRepository

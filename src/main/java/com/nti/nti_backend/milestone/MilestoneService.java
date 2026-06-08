@@ -3,13 +3,19 @@ package com.nti.nti_backend.milestone;
 import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.application.ApplicationRepository;
 import com.nti.nti_backend.file.FileServeService;
+import com.nti.nti_backend.mentorship.dto.MentorshipResponseDTO;
+import com.nti.nti_backend.mentorship.entity.MentorshipStatus;
+import com.nti.nti_backend.mentorship.repository.MentorshipRepository;
 import com.nti.nti_backend.milestone.dto.*;
 import com.nti.nti_backend.milestone.entity.Milestone;
 import com.nti.nti_backend.milestone.entity.MilestoneAttachment;
 import com.nti.nti_backend.milestone.entity.MilestoneComment;
 import com.nti.nti_backend.milestone.entity.MilestoneStatus;
+import com.nti.nti_backend.organization.entity.OrgMemberRole;
+import com.nti.nti_backend.organization.entity.Organization;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
+import com.nti.nti_backend.organization.repository.OrgMemberRepository;
 import com.nti.nti_backend.program.ProgramType;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
@@ -32,7 +38,10 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
 @Service
 @RequiredArgsConstructor
 public class MilestoneService {
@@ -40,6 +49,8 @@ public class MilestoneService {
     private final MilestoneRepository milestoneRepository;
     //private final MentorshipRepository mentorshipRepository;
     private final ApplicationRepository applicationRepository;
+    private final OrgMemberRepository orgMemberRepository;
+    private final MentorshipRepository mentorshipRepository;
     private final MilestoneAttachmentRepository attachmentRepository;
     private final FileServeService fileServeService;
 
@@ -78,6 +89,13 @@ public class MilestoneService {
 
     private final MilestoneCommentRepository milestoneCommentRepository;
 
+    private boolean isAdminOrSuperAdmin(User user) {
+        return user.hasRole(Role.ADMIN) || user.hasRole(Role.SUPER_ADMIN);
+    }
+
+    private boolean isSuperAdmin(User user) {
+        return user.hasRole(Role.SUPER_ADMIN);
+    }
     // helpers
     private User getCurrentUser() {
         return (User) SecurityContextHolder.getContext()
@@ -114,39 +132,67 @@ public class MilestoneService {
     }
 
     // CREATE
+    @CacheEvict(value = MILESTONES_PENDING, allEntries = true)
     @Transactional
     public MilestoneResponseDTO create(MilestoneRequestDTO dto) {
         User currentUser = getCurrentUser();
 
-        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
+        boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
         boolean isStudent = currentUser.hasRole(Role.STUDENT);
         boolean isFirm = currentUser.hasRole(Role.FIRM);
 
-        if (!isAdmin && !isStudent && !isFirm) {
-            throw new ConflictException("Only STUDENT or ADMIN or ORGANIZATION can create milestones");
-        }
-
         Application application = null;
+        MilestoneStatus initialStatus;
+
         if (dto.getApplicationId() != null) {
             application = applicationRepository.findById(dto.getApplicationId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Application not found: " + dto.getApplicationId()
-                    ));
-
-        }
-        if (isFirm) {
-            ProgramType type = application.getCall()
+                    .orElseThrow(() -> new ResourceNotFoundException("Application not found" + dto.getApplicationId()));
+            ProgramType programType = application.getCall()
                     .getProgram().getType();
-            if (type != ProgramType.PROGRAM_B) {
+            if (isAdminOrSuper) {
+                initialStatus = MilestoneStatus.PLANNED;
+            } else if (isStudent && programType == ProgramType.PROGRAM_A) {
+                boolean isTeamLeader = application.getApplicant().getId()
+                        .equals(currentUser.getId());
+                if (!isTeamLeader) {
+                    throw new ConflictException(
+                            "Only the team leader can create milestoens for Program A"
+                    );
+                }
+                initialStatus = MilestoneStatus.PENDING_APPROVAL;
+            } else if (isFirm && programType == ProgramType.PROGRAM_B) {
+                Organization programOrg = application.getCall()
+                        .getProgram().getOrganization();
+                if (programOrg == null) {
+                    throw new ConflictException(
+                            "This Program B has no associated organization"
+                    );
+                }
+                boolean ownsOrg = orgMemberRepository
+                        .findAllByUserId(currentUser.getId())
+                        .stream()
+                        .filter(m -> m.getRole() == OrgMemberRole.OWNER)
+                        .anyMatch(m -> m.getOrganization().getId()
+                                .equals(programOrg.getId()));
+                if (!ownsOrg) {
+                    throw new ConflictException(
+                            "Only the organization owner can create milestones for Program B"
+                    );
+                }
+                initialStatus = MilestoneStatus.PENDING_APPROVAL;
+            } else {
                 throw new ConflictException(
-                        "Organizations can only add milestones to Program B"
+                        "You do not have permission to create milestones for this application"
                 );
             }
+        } else {
+            if (!isAdminOrSuper) {
+                throw new ConflictException(
+                        "Only ADMIN or SUPER_ADMIN can create milestones without an application"
+                );
+            }
+            initialStatus = MilestoneStatus.PLANNED;
         }
-
-        MilestoneStatus initialStatus = isAdmin ?
-                MilestoneStatus.PLANNED
-                : MilestoneStatus.PENDING_APPROVAL;
 
         Milestone milestone = Milestone.builder()
                 .application(application)
@@ -180,12 +226,13 @@ public class MilestoneService {
             results = milestoneRepository.findAll();
         }
 
-        return results.stream().map(this::toResponseDTO).toList();
+        return results.stream().map(this::toResponseDTO).collect(Collectors.toList());
 
     }
 
     // FIND BY ID
 
+    @Cacheable(value = MILESTONE, key = "#id")
     @Transactional(readOnly = true)
     public MilestoneResponseDTO findById(UUID id) {
         Milestone milestone = milestoneRepository.findById(id)
@@ -196,6 +243,10 @@ public class MilestoneService {
     }
 
     // UPDATE content
+    @Caching(evict = {
+            @CacheEvict(value = MILESTONE, key = "#id"),
+            @CacheEvict(value = MILESTONES_PENDING, allEntries = true)
+    })
     @Transactional
     public MilestoneResponseDTO update(UUID id, MilestoneRequestDTO dto) {
         Milestone milestone = milestoneRepository.findById(id)
@@ -204,32 +255,51 @@ public class MilestoneService {
                 ));
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
-        boolean isCreator = milestone.getCreatedBy().getId().equals(currentUser.getId());
+        boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
 
-        // Can't edit COMPLETED milestone
         if (milestone.getStatus() == MilestoneStatus.COMPLETED) {
-            throw new ConflictException(
-                    "Cannot edit a COMPLETED milestone"
-            );
+            throw new ConflictException("Connect edit a COMPLETED milestone");
         }
 
-        if (isAdmin) {
-
-        } else if (isCreator && milestone.getStatus() ==  MilestoneStatus.PENDING_APPROVAL) {
+        if (isAdminOrSuper) {
 
         } else {
-            throw new ConflictException(
-                    "You cannot edit this milestone. Once APPROVED, only admin can make changes"
-            );
+            boolean isTeamLeader = milestone.getApplication() != null
+                    && milestone.getApplication().getApplicant().getId()
+                    .equals(currentUser.getId());
+            if (!isTeamLeader) {
+                throw new ConflictException(
+                        "You do not have permission to edit this milestone"
+                );
+            }
+            if (milestone.getStatus() != MilestoneStatus.PENDING_APPROVAL) {
+                throw new ConflictException(
+                        "Students can only edit milestones that are pending approval"
+                );
+            }
         }
-
 
         milestone.setTitle(dto.getTitle());
         milestone.setDescription(dto.getDescription());
         milestone.setDueDate(dto.getDueDate());
-
         return toResponseDTO(milestoneRepository.save(milestone));
+
+    }
+
+    @Caching(evict = {
+            @CacheEvict(value = MILESTONE, key = "#id"),
+            @CacheEvict(value = MILESTONES_PENDING, allEntries = true)
+    })
+    @Transactional
+    public void deleteMilestone(UUID id) {
+        if (!isAdminOrSuperAdmin(getCurrentUser())) {
+            throw new ConflictException(
+                    "Only ADMIN or SUPER_ADMIN can delete milestones");
+        }
+        Milestone milestone = milestoneRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Milestone not found: " + id));
+        milestoneRepository.delete(milestone);
     }
 
     @Transactional
@@ -257,7 +327,7 @@ public class MilestoneService {
         }
         return milestoneCommentRepository
                 .findAllByMilestoneIdOrderByCreatedAtDesc(milestoneId)
-                .stream().map(this::toCommentDTO).toList();
+                .stream().map(this::toCommentDTO).collect(Collectors.toList());
     }
 
     @Transactional
@@ -282,19 +352,38 @@ public class MilestoneService {
     public MilestoneAttachmentDTO addAttachment(
             UUID milestoneId, MultipartFile file, User currentUser
     ) {
-    boolean canAttach = currentUser.hasRole(Role.ADMIN)
-            || currentUser.hasRole(Role.STUDENT)
-            || currentUser.hasRole(Role.MENTOR);
-    if (!canAttach) {
-        throw new ConflictException(
-                "Only MENTOR, STUDENT or ADMIN can add attachments"
-        );
-    }
+        if (file == null || file.isEmpty()) {
+            throw new ConflictException("No file provided for upload.");
+        }
+
+        long MAX_FILE_SIZE = 5 * 1024 * 1024;
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new ConflictException("File size exceeds the 5MB limit.");
+        }
 
     Milestone milestone = milestoneRepository.findById(milestoneId)
             .orElseThrow(() -> new ResourceNotFoundException(
                     "Milestone not found: " + milestoneId
             ));
+
+    boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
+    boolean isTeamLeader = milestone.getApplication() != null
+            && milestone.getApplication().getApplicant().getId()
+            .equals(currentUser.getId());
+    boolean isAssignedMentor = currentUser.hasRole(Role.MENTOR)
+            && milestone.getApplication() != null
+            && mentorshipRepository.existsByMentorIdAndApplication_IdAndStatus(
+                    currentUser.getId(),
+            milestone.getApplication().getId(),
+            MentorshipStatus.ACTIVE
+    );
+
+    if (!isAdminOrSuper && !isTeamLeader && !isAssignedMentor) {
+        throw new ConflictException(
+                "Only the team leader, assigned mentor, or ADMIN can add attachments to this milestone"
+        );
+    }
+
     long currentCount = attachmentRepository.countByMilestoneId(milestoneId);
     if (currentCount >= MAX_ATTACHMENTS) {
         throw new ConflictException(
@@ -321,7 +410,7 @@ public class MilestoneService {
             throw new ResourceNotFoundException("Milestone not found: " + milestoneId);
         }
         return attachmentRepository.findAllByMilestoneId(milestoneId)
-                .stream().map(this::toAttachmentDTO).toList();
+                .stream().map(this::toAttachmentDTO).collect(Collectors.toList());
     }
 
     @Transactional
@@ -335,9 +424,9 @@ public class MilestoneService {
 
         boolean isOwner = attachment.getUploadedBy().getId()
                 .equals(currentUser.getId());
-        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
+        boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
 
-        if (!isOwner && !isAdmin) {
+        if (!isOwner && !isAdminOrSuper) {
             throw new ConflictException(
                     "You can only delete your own attachments"
             );
@@ -382,19 +471,24 @@ public class MilestoneService {
     }
 
     //  GET pending approval
+    @Cacheable(MILESTONES_PENDING)
     @Transactional(readOnly = true)
     public List<MilestoneResponseDTO> getPendingApproval() {
         User currentUser = getCurrentUser();
-        if (!currentUser.hasRole(Role.ADMIN)) {
+        if (!isAdminOrSuperAdmin(currentUser)) {
             throw new ConflictException("Only ADMIN can view pending mielstones");
         }
         return milestoneRepository.findAllByStatus(MilestoneStatus.PENDING_APPROVAL)
                 .stream()
                 .map(this::toResponseDTO)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     // CHANGE STATUS
+    @Caching(evict = {
+            @CacheEvict(value = MILESTONE, key = "#id"),
+            @CacheEvict(value = MILESTONES_PENDING, allEntries = true)
+    })
     @Transactional
     public MilestoneResponseDTO changeStatus(UUID id, ChangeStatusRequestDTO dto) {
         Milestone milestone = milestoneRepository.findById(id)
@@ -403,42 +497,56 @@ public class MilestoneService {
                 ));
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
-        boolean isMentor = currentUser.hasRole(Role.MENTOR);
-
-        if (!isAdmin && !isMentor) {
-            throw new ConflictException(
-                    "Only ADMIN or MENTOR can change milestone status"
-            );
-        }
-
+        boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
         MilestoneStatus newStatus = dto.getStatus();
+        MilestoneStatus effectiveCurrent = resolveStatus(milestone);
 
-        MilestoneStatus effectiveCurrentStatus = resolveStatus(milestone);
-
-        if (effectiveCurrentStatus == MilestoneStatus.OVERDUE && !isAdmin) {
-            throw new ConflictException("Only ADMIN can change OVERDUE status");
-        }
-
-        Set<MilestoneStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(
-                effectiveCurrentStatus,
-                Set.of()
-        );
-
+        Set<MilestoneStatus> allowed = ALLOWED_TRANSITIONS
+                .getOrDefault(effectiveCurrent, Set.of());
         if (!allowed.contains(newStatus)) {
             throw new ConflictException(
-                    "Transition from " + effectiveCurrentStatus + " to " + newStatus +
-                            " is not allowed"
+                    "Transition from " + effectiveCurrent + " to " + newStatus
+                    + " is not allowed"
             );
+        }
+
+        if (effectiveCurrent == MilestoneStatus.PENDING_APPROVAL) {
+            if (!isAdminOrSuper) {
+                throw new ConflictException(
+                        "Only ADMIN or SUPER_ADMIN can approve milestones"
+                );
+            }
+        } else if (effectiveCurrent == MilestoneStatus.OVERDUE) {
+
+            if (!isAdminOrSuper) {
+                throw new ConflictException(
+                        "Only ADMIN or SUPER_ADMIN can change the status of OVERDUE milestones"
+                );
+            }
+        } else {
+            if (!isAdminOrSuper) {
+                boolean isAssignedMentor = currentUser.hasRole(Role.MENTOR)
+                        && milestone.getApplication() != null
+                        && mentorshipRepository
+                        .existsByMentorIdAndApplication_IdAndStatus(
+                                currentUser.getId(),
+                                milestone.getApplication().getId(),
+                                MentorshipStatus.ACTIVE
+                        );
+                if (!isAssignedMentor) {
+                    throw new ConflictException(
+                            "Only the assigned mentor, ADMIN, or SUPER_ADMIN can change milestone status"
+                    );
+                }
+            }
         }
 
         if (newStatus == MilestoneStatus.COMPLETED) {
             milestone.setCompletedAt(OffsetDateTime.now());
         }
-
         milestone.setStatus(newStatus);
-
         return toResponseDTO(milestoneRepository.save(milestone));
+
     }
 
     private MilestoneCommentDTO toCommentDTO(MilestoneComment c) {

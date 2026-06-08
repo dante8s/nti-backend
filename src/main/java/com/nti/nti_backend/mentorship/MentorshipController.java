@@ -2,9 +2,11 @@ package com.nti.nti_backend.mentorship;
 
 import com.nti.nti_backend.mentorship.dto.*;
 import com.nti.nti_backend.mentorship.entity.MentorshipStatus;
+import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,14 +29,23 @@ public class MentorshipController {
 
     // GET /api/mentorships/my
     @GetMapping("/mentorships/my")
-    public ResponseEntity<List<MentorshipResponseDTO>> getMyMentorships() {
-        return ResponseEntity.ok(mentorshipService.getMyMentorships());
+    public ResponseEntity<List<MentorshipResponseDTO>> getMyMentorships(
+            @AuthenticationPrincipal User user
+    ) {
+        return ResponseEntity.ok(mentorshipService.getMyMentorships(user.getId()));
     }
 
     // GET /api/mentorships/{id}
     @GetMapping("/mentorships/{id}")
     public ResponseEntity<MentorshipResponseDTO> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(mentorshipService.getById(id));
+    }
+
+    // DELETE api/mentorships/{id}
+    @DeleteMapping("/mentorships/{id}")
+    public ResponseEntity<Void> deleteMentorship(@PathVariable UUID id) {
+        mentorshipService.deleteMentorship(id);
+        return ResponseEntity.noContent().build();
     }
 
     // PATCH /api/mentorships/{id}/status

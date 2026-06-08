@@ -50,6 +50,13 @@ public class MilestoneController {
         return ResponseEntity.ok(milestoneService.findById(id));
     }
 
+    // DELETE /api/milestones/{id}
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteMilestone(@PathVariable UUID id) {
+        milestoneService.deleteMilestone(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // PUT /api/milestones/{id} - title, description, dueDate
     @PutMapping("/{id}")
     public ResponseEntity<MilestoneResponseDTO> update(

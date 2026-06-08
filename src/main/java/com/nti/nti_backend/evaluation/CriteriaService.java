@@ -4,6 +4,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
 
 @Service
 @Transactional
@@ -15,11 +17,13 @@ public class CriteriaService {
         this.criteriaRepository = criteriaRepository;
     }
 
+    @Cacheable(value = CRITERIA, key = "#callId")
     @Transactional(readOnly = true)
     public List<Criteria> getCriteriaForCall(Long callId) {
         return criteriaRepository.findByCall_IdOrderBySortOrderAsc(callId);
     }
 
+    @CacheEvict(value = CRITERIA, key = "#criteria.call.id")
     public Criteria createCriteria(Criteria criteria) {
         if (criteriaRepository.existsByCall_IdAndName(
                 criteria.getCall().getId(), criteria.getName())) {
@@ -31,6 +35,7 @@ public class CriteriaService {
         return criteriaRepository.save(criteria);
     }
 
+    @CacheEvict(value = CRITERIA, allEntries = true)
     public Criteria updateCriteria(Long criteriaId, Criteria updated) {
         Criteria existing = criteriaRepository.findById(criteriaId)
                 .orElseThrow(() -> new IllegalStateException("Criteria not found by that id" + criteriaId));
@@ -46,6 +51,7 @@ public class CriteriaService {
         return criteriaRepository.save(existing);
     }
 
+    @CacheEvict(value = CRITERIA, allEntries = true)
     public void deleteCriteria(Long criteriaId) {
         if (!criteriaRepository.existsById(criteriaId)) {
             throw new IllegalStateException("Criteria not found by that id" + criteriaId);
@@ -53,6 +59,7 @@ public class CriteriaService {
         criteriaRepository.deleteById(criteriaId);
     }
 
+    @Cacheable(value = CRITERIA, key = "'valid:' + #callId")
     @Transactional(readOnly = true)
     public boolean isRubricValid(Long callId) {
         long count = criteriaRepository.countByCall_Id(callId);

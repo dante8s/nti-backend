@@ -150,10 +150,10 @@ public class OrganizationController {
     }
 
     @GetMapping("/program-b-requirements/{programId}")
-    public ResponseEntity<ProgramBRequirementsDTO> getProgramBRequirements(
-            @PathVariable Long programId
-    ) {
-        return ResponseEntity.ok(orgService.getByProgram(programId));
+    public ResponseEntity<ProgramBRequirementsDTO> getProgramBRequirements(@PathVariable Long programId) {
+        return orgService.getByProgram(programId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     // GET /api/organizations/requirements/{programId}/specification?inline=true
