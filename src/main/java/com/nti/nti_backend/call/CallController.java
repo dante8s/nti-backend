@@ -1,9 +1,11 @@
 package com.nti.nti_backend.call;
 
+import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -40,20 +42,20 @@ public class CallController {
 
     // Тільки ADMIN
     @PostMapping("/api/admin/programs/{programId}/calls")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<CallDTO> create(
             @PathVariable Long programId,
-            @Valid @RequestBody CreateCallRequest request) {
-        return ResponseEntity.ok(
-                callService.create(programId, request)
-        );
+            @Valid @RequestBody CreateCallRequest request,
+            @AuthenticationPrincipal User actor) {
+        return ResponseEntity.ok(callService.create(programId, request, actor));
     }
 
     @PatchMapping("/api/admin/calls/{id}/close")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Void> close(
-            @PathVariable Long id) {
-        callService.close(id);
+            @PathVariable Long id,
+            @AuthenticationPrincipal User actor) {
+        callService.close(id, actor);
         return ResponseEntity.ok().build();
     }
 

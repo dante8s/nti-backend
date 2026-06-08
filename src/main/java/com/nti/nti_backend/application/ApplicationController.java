@@ -1,6 +1,7 @@
 package com.nti.nti_backend.application;
 
 import com.nti.nti_backend.Application;
+import com.nti.nti_backend.file.FileTypeValidator;
 import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -89,7 +90,7 @@ public class ApplicationController {
 
     // Одна заявка (власник, ментор, комісія, адмін)
     @GetMapping("/applications/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('STUDENT','MENTOR','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN','FIRM','FIRM_USER')")
     public ResponseEntity<?> getOne(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
@@ -118,14 +119,17 @@ public class ApplicationController {
             @PathVariable String documentType,
             @RequestParam("file") MultipartFile file) {
 
-        String contentType = file.getContentType();
-        boolean isPdf = "application/pdf".equals(contentType);
-        boolean isDocx = ("application/vnd.openxmlformats"
-                + "-officedocument.wordprocessingml.document")
-                .equals(contentType);
-
-        if (!isPdf && !isDocx) return ResponseEntity.badRequest().build();
         if (file.getSize() > 10L * 1024 * 1024) return ResponseEntity.badRequest().build();
+
+        boolean isPdf;
+        boolean isDocx;
+        try {
+            isPdf = FileTypeValidator.isPdf(file);
+            isDocx = FileTypeValidator.isDocx(file);
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (!isPdf && !isDocx) return ResponseEntity.badRequest().build();
 
         try {
             String uploadDir = "uploads/applications/" + id + "/";
@@ -148,16 +152,16 @@ public class ApplicationController {
         }
     }
 
-    // Всі заявки — ADMIN
+    // Всі заявки — ADMIN / SUPER_ADMIN
     @GetMapping("/admin/applications")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<ApplicationDTO>> getAll() {
         return ResponseEntity.ok(appService.getAll());
     }
 
     // Змінити статус — адмін або уповноважений комісії (SUPER_EVALUATOR)
     @PatchMapping("/admin/applications/{id}/status")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_EVALUATOR')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','SUPER_EVALUATOR')")
     public ResponseEntity<?> changeStatus(
             @AuthenticationPrincipal User admin,
             @PathVariable Long id,

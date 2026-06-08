@@ -73,6 +73,9 @@ public class User implements UserDetails {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
+    private LocalDateTime gdprConsentedAt;
+    private String        gdprConsentIp;
+
     // --- UserDetails ---
 
     @Override

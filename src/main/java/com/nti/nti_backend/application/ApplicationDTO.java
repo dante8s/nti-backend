@@ -1,9 +1,3 @@
-package com.nti.nti_backend.application;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
-
 public record ApplicationDTO(
         Long id,
         Long applicantId,
