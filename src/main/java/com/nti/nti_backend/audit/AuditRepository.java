@@ -15,6 +15,8 @@ public interface AuditRepository
 
     List<AuditEvent> findAllByOrderByCreatedAtDesc();
 
+    List<AuditEvent> findByActor_IdOrderByCreatedAtDesc(Long actorId);
+
     @Query("""
         SELECT e FROM AuditEvent e
         WHERE (:entityType IS NULL OR e.entityType = :entityType)

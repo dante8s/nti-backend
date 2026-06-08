@@ -38,7 +38,7 @@ public class AuditController {
 
     @GetMapping("/applications/{id}/audit")
     @PreAuthorize(
-            "hasAnyRole('ADMIN','SUPER_ADMIN','STUDENT','EVALUATOR','SUPER_EVALUATOR')"
+            "hasAnyRole('ADMIN','SUPER_ADMIN','STUDENT','MENTOR','EVALUATOR','SUPER_EVALUATOR')"
     )
     public ResponseEntity<List<AuditEventDTO>> getApplicationAudit(
             @AuthenticationPrincipal User user,

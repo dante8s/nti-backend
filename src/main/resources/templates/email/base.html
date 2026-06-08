@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="uk">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title th:text="${subject}">NTI Повідомлення</title>
+  <style>
+    body { margin:0; padding:0; background:#f1f5f9; font-family: 'Segoe UI', Arial, sans-serif; }
+    .wrapper { max-width:600px; margin:32px auto; background:#ffffff; border-radius:16px;
+               overflow:hidden; box-shadow:0 4px 24px rgba(15,23,42,.08); }
+    .header { background:linear-gradient(135deg,#4f46e5,#6366f1); padding:32px 40px; text-align:center; }
+    .header__logo { color:#ffffff; font-size:1.6rem; font-weight:800; letter-spacing:-0.02em;
+                    text-decoration:none; }
+    .header__tag { color:rgba(255,255,255,.75); font-size:.85rem; margin-top:4px; }
+    .body { padding:36px 40px; color:#1e293b; }
+    .body p { margin:0 0 16px; line-height:1.65; font-size:.97rem; white-space:pre-line; }
+    .footer { background:#f8fafc; border-top:1px solid #e2e8f0; padding:20px 40px;
+              text-align:center; color:#94a3b8; font-size:.8rem; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <div class="header__logo">NTI</div>
+      <div class="header__tag">Nitriansky technologický inkubátor</div>
+    </div>
+    <div class="body">
+      <p th:text="${body}">Текст листа</p>
+    </div>
+    <div class="footer">
+      © 2026 Nitriansky technologický inkubátor. Усі права захищено.
+    </div>
+  </div>
+</body>
+</html>

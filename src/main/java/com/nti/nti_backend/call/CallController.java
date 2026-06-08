@@ -42,7 +42,7 @@ public class CallController {
 
     // Тільки ADMIN
     @PostMapping("/api/admin/programs/{programId}/calls")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<CallDTO> create(
             @PathVariable Long programId,
             @Valid @RequestBody CreateCallRequest request,
@@ -51,7 +51,7 @@ public class CallController {
     }
 
     @PatchMapping("/api/admin/calls/{id}/close")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Void> close(
             @PathVariable Long id,
             @AuthenticationPrincipal User actor) {

@@ -27,7 +27,7 @@ public class ApplicationDocumentController {
     private final ApplicationService appService;
 
     @GetMapping("/applications/{id}/documents/status")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('STUDENT','MENTOR','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN','FIRM','FIRM_USER')")
     public ResponseEntity<List<DocumentStatusDTO>> getDocumentStatus(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
@@ -48,7 +48,7 @@ public class ApplicationDocumentController {
      * Перегляд / завантаження файлу (inline для iframe; disposition=attachment — зберегти).
      */
     @GetMapping("/applications/{id}/documents/{documentType}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('STUDENT','MENTOR','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN','FIRM','FIRM_USER')")
     public ResponseEntity<Resource> getApplicationDocument(
             @AuthenticationPrincipal User user,
             @PathVariable Long id,

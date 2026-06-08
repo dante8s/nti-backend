@@ -21,8 +21,18 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<String> register(
-            @Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.ok(authService.register(request));
+            @Valid @RequestBody RegisterRequest request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
+        String ip = resolveClientIp(httpRequest);
+        return ResponseEntity.ok(authService.register(request, ip));
+    }
+
+    private static String resolveClientIp(jakarta.servlet.http.HttpServletRequest req) {
+        String forwarded = req.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return req.getRemoteAddr();
     }
 
     @PostMapping("/login")
