@@ -4,7 +4,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -171,6 +174,7 @@ public class EmailService {
     }
 
     // Відхилення запиту на завершення проекту (тільки лідеру)
+    @Async
     public void sendCompletionRejected(String to, String leaderName, String projectName) {
         send(
                 to,
@@ -181,8 +185,8 @@ public class EmailService {
                         + "Команда NTI"
         );
     }
-
     // Запрошення незареєстрованого користувача до команди
+    @Async
     public void sendTeamInviteToUnregistered(String to, String teamName, String token) {
         String link = frontendUrl + "/complete-team-invite?token=" + token;
         send(
@@ -190,7 +194,7 @@ public class EmailService {
                 "NTI — Запрошення до команди «" + teamName + "»",
                 "Вітаємо!\n\n"
                         + "Вас запрошують до команди «" + teamName + "» на платформі NTI.\n\n"
-                        + "Для того щоб прийняти участь, перейдіть за посиланням та зробіть реєстрацію і логін:\n\n"
+                        + "Для того щоб прийняти участь, перейдіть за посиланням:\n\n"
                         + link + "\n\n"
                         + "Вам потрібно буде вказати ваше ім'я та пароль.\n"
                         + "Після реєстрації ви зможете прийняти або відхилити запрошення в особистому кабінеті.\n\n"
