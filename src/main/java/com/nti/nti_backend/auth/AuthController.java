@@ -1,11 +1,13 @@
 package com.nti.nti_backend.auth;
 
 import com.nti.nti_backend.user.Role;
+import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserDTO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -54,8 +56,9 @@ public class AuthController {
 
     @PostMapping("/admin/users/{id}/approve")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<String> approveUser(@PathVariable Long id) {
-        authService.approveUser(id);
+    public ResponseEntity<String> approveUser(@PathVariable Long id,
+                                              @AuthenticationPrincipal User actor) {
+        authService.approveUser(id, actor);
         return ResponseEntity.ok("Акаунт схвалено");
     }
     
@@ -88,8 +91,9 @@ public class AuthController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<String> rejectUser(
             @PathVariable Long id,
-            @RequestParam String reason) {
-        authService.rejectUser(id, reason);
+            @RequestParam String reason,
+            @AuthenticationPrincipal User actor) {
+        authService.rejectUser(id, reason, actor);
         return ResponseEntity.ok("Акаунт відхилено");
     }
 
@@ -97,8 +101,9 @@ public class AuthController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<String> suspendUser(
             @PathVariable Long id,
-            @RequestParam String reason) {
-        authService.suspendUser(id, reason);
+            @RequestParam String reason,
+            @AuthenticationPrincipal User actor) {
+        authService.suspendUser(id, reason, actor);
         return ResponseEntity.ok("Акаунт заблоковано");
     }
 
@@ -106,8 +111,9 @@ public class AuthController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<String> addRole(
             @PathVariable Long id,
-            @RequestParam String role) {
-        authService.addRole(id, Role.valueOf(role));
+            @RequestParam String role,
+            @AuthenticationPrincipal User actor) {
+        authService.addRole(id, Role.valueOf(role), actor);
         return ResponseEntity.ok("Роль додано");
     }
 
@@ -115,8 +121,9 @@ public class AuthController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<String> removeRole(
             @PathVariable Long id,
-            @RequestParam String role) {
-        authService.removeRole(id, Role.valueOf(role));
+            @RequestParam String role,
+            @AuthenticationPrincipal User actor) {
+        authService.removeRole(id, Role.valueOf(role), actor);
         return ResponseEntity.ok("Роль видалено");
     }
 

@@ -26,11 +26,13 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import java.util.UUID;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ApplicationService {
@@ -210,11 +212,15 @@ public class ApplicationService {
                 "Заявку відправлено на розгляд"
         );
 
-        emailService.sendApplicationStatusChanged(
-                app.getApplicant().getEmail(),
-                app.getApplicant().getName(),
-                "SUBMITTED", null
-        );
+        try {
+            emailService.sendApplicationStatusChanged(
+                    app.getApplicant().getEmail(),
+                    app.getApplicant().getName(),
+                    "SUBMITTED", null
+            );
+        } catch (Exception e) {
+            log.warn("Failed to send submit email for application {}: {}", appId, e.getMessage());
+        }
 
         return toDTO(saved);
     }
@@ -456,11 +462,15 @@ public class ApplicationService {
                         ? ". Коментар: " + comment : "")
         );
 
-        emailService.sendApplicationStatusChanged(
-                app.getApplicant().getEmail(),
-                app.getApplicant().getName(),
-                newStatus.name(), comment
-        );
+        try {
+            emailService.sendApplicationStatusChanged(
+                    app.getApplicant().getEmail(),
+                    app.getApplicant().getName(),
+                    newStatus.name(), comment
+            );
+        } catch (Exception e) {
+            log.warn("Failed to send status email for application {}: {}", appId, e.getMessage());
+        }
 
         return toDTO(saved);
     }

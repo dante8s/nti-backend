@@ -1,6 +1,7 @@
 package com.nti.nti_backend.application;
 
 import com.nti.nti_backend.Application;
+import com.nti.nti_backend.file.FileTypeValidator;
 import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -117,14 +118,17 @@ public class ApplicationController {
             @PathVariable String documentType,
             @RequestParam("file") MultipartFile file) {
 
-        String contentType = file.getContentType();
-        boolean isPdf = "application/pdf".equals(contentType);
-        boolean isDocx = ("application/vnd.openxmlformats"
-                + "-officedocument.wordprocessingml.document")
-                .equals(contentType);
-
-        if (!isPdf && !isDocx) return ResponseEntity.badRequest().build();
         if (file.getSize() > 10L * 1024 * 1024) return ResponseEntity.badRequest().build();
+
+        boolean isPdf;
+        boolean isDocx;
+        try {
+            isPdf = FileTypeValidator.isPdf(file);
+            isDocx = FileTypeValidator.isDocx(file);
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (!isPdf && !isDocx) return ResponseEntity.badRequest().build();
 
         try {
             String uploadDir = "uploads/applications/" + id + "/";

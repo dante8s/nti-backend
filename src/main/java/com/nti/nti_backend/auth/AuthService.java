@@ -1,5 +1,6 @@
 package com.nti.nti_backend.auth;
 
+import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.email.EmailService;
 import com.nti.nti_backend.jwt.JwtUtil;
 import com.nti.nti_backend.recaptcha.RecaptchaService;
@@ -26,6 +27,7 @@ public class AuthService {
     private final AuthenticationManager authManager;
     private final EmailService emailService;
     private final RecaptchaService recaptchaService;
+    private final AuditService auditService;
 
     // Ролі які можна вибрати при реєстрації
     private static final Set<String> ALLOWED_ROLES =
@@ -245,7 +247,7 @@ public class AuthService {
     // -----------------------------------------------
     // СХВАЛЕННЯ АКАУНТУ (тільки SUPER_ADMIN)
     // -----------------------------------------------
-    public void approveUser(Long userId) {
+    public void approveUser(Long userId, User actor) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
 
@@ -254,12 +256,14 @@ public class AuthService {
         userRepository.save(user);
 
         emailService.sendAccountApproved(user.getEmail(), user.getName());
+        auditService.log(actor, "USER_APPROVED", "USER", userId,
+                "Акаунт схвалено: " + user.getEmail());
     }
 
     // -----------------------------------------------
     // ВІДХИЛЕННЯ АКАУНТУ (тільки SUPER_ADMIN)
     // -----------------------------------------------
-    public void rejectUser(Long userId, String reason) {
+    public void rejectUser(Long userId, String reason, User actor) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
 
@@ -268,12 +272,14 @@ public class AuthService {
         userRepository.save(user);
 
         emailService.sendAccountRejected(user.getEmail(), user.getName(), reason);
+        auditService.log(actor, "USER_REJECTED", "USER", userId,
+                "Акаунт відхилено: " + user.getEmail() + ". Причина: " + reason);
     }
 
     // -----------------------------------------------
     // БЛОКУВАННЯ АКАУНТУ (тільки SUPER_ADMIN)
     // -----------------------------------------------
-    public void suspendUser(Long userId, String reason) {
+    public void suspendUser(Long userId, String reason, User actor) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
 
@@ -282,23 +288,29 @@ public class AuthService {
         userRepository.save(user);
 
         emailService.sendAccountSuspended(user.getEmail(), user.getName(), reason);
+        auditService.log(actor, "USER_SUSPENDED", "USER", userId,
+                "Акаунт заблоковано: " + user.getEmail() + ". Причина: " + reason);
     }
 
     // -----------------------------------------------
     // ДОДАТИ / ЗАБРАТИ РОЛЬ (SUPER_ADMIN)
     // -----------------------------------------------
-    public void addRole(Long userId, Role role) {
+    public void addRole(Long userId, Role role, User actor) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
         user.getRoles().add(role);
         userRepository.save(user);
+        auditService.log(actor, "USER_ROLE_ADDED", "USER", userId,
+                "Роль " + role.name() + " додано для: " + user.getEmail());
     }
 
-    public void removeRole(Long userId, Role role) {
+    public void removeRole(Long userId, Role role, User actor) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
         user.getRoles().remove(role);
         userRepository.save(user);
+        auditService.log(actor, "USER_ROLE_REMOVED", "USER", userId,
+                "Роль " + role.name() + " видалено для: " + user.getEmail());
     }
 
     // -----------------------------------------------
