@@ -8,6 +8,8 @@ public enum ApplicationStatus {
     NEEDS_REVISION,
     APPROVED,
     REJECTED,
+    COMPLETION_REQUESTED,
+    COMPLETED
     ONBOARDING,
     ACTIVE,
     SUSPENDED,

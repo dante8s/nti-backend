@@ -86,4 +86,9 @@ public interface ApplicationRepository
             ORDER BY ap.id ASC, a.updatedAt DESC
             """)
     List<Application> findByApplicantIdInWithDetails(@Param("leaderIds") List<Long> leaderIds);
+
+    @Query("SELECT COUNT(a) > 0 FROM Application a WHERE a.applicant.id = :leaderId AND (a.status = 'APPROVED' OR a.status = 'COMPLETION_REQUESTED')")
+    boolean existsApprovedByApplicantId(@Param("leaderId") Long leaderId);
+
+    boolean existsByApplicantIdAndStatusInAndIdNot(Long applicantId, List<ApplicationStatus> statuses, Long excludeId);
 }

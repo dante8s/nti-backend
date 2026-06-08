@@ -99,6 +99,10 @@ public class ReportingService {
         List<Criteria> criteria = criteriaRepository.findByCall_IdOrderBySortOrderAsc(callId);
         List<Evaluation> evaluations = evaluationRepository.findAllByCallId(callId);
 
+        // Всі заявки виклику — щоб заявки без оцінок теж потрапили в звіт
+        // findByCallIdWithApplicant робить JOIN FETCH applicant — без LazyInitializationException
+        List<Application> allApplications = applicationRepository.findByCallIdWithApplicant(callId);
+
         Map<Long, List<Evaluation>> byApplication = evaluations.stream()
                 .collect(Collectors.groupingBy(e -> e.getApplication().getId()));
 
@@ -119,42 +123,43 @@ public class ReportingService {
             }
 
             createStyledCell(header, col++, "Weighted Avg", headerStyle);
-            createStyledCell(header, col++, "Recommendation", headerStyle);
+            createStyledCell(header, col,   "Recommendation", headerStyle);
+
+            // Фіксуємо кількість колонок після побудови заголовка
+            final int totalCols = col + 1;
 
             int rowNum = 1;
-            for (Map.Entry<Long, List<Evaluation>> entry : byApplication.entrySet()) {
-                Long appId = entry.getKey();
-                List<Evaluation> appEvals = entry.getValue();
+            for (Application application : allApplications) {
+                Long appId = application.getId();
+                List<Evaluation> appEvals = byApplication.getOrDefault(appId, List.of());
 
                 Row row = sheet.createRow(rowNum++);
                 col = 0;
 
                 row.createCell(col++).setCellValue(appId);
 
-                String applicationName = "Unknown";
-                if (!appEvals.isEmpty()
-                        && appEvals.get(0).getApplication() != null
-                        && appEvals.get(0).getApplication().getApplicant() != null) {
-                    String applicantName = appEvals.get(0).getApplication().getApplicant().getName();
-                    Long applicantId = appEvals.get(0).getApplication().getApplicant().getId();
-                    applicationName = applicantName != null && !applicantName.isBlank()
-                            ? applicantName
-                            : ("User#" + applicantId);
+                // Ім'я заявника
+                String applicantName = "Unknown";
+                if (application.getApplicant() != null) {
+                    String name = application.getApplicant().getName();
+                    Long uid  = application.getApplicant().getId();
+                    applicantName = (name != null && !name.isBlank()) ? name : ("User#" + uid);
                 }
+                row.createCell(col++).setCellValue(applicantName);
 
-                row.createCell(col++).setCellValue(applicationName);
-
+                // Середні бали по кожному критерію
                 Map<Long, Double> scoreByCriteria = appEvals.stream()
+                        .filter(e -> e.getCriteria() != null)
                         .collect(Collectors.groupingBy(
                                 e -> e.getCriteria().getId(),
                                 Collectors.averagingDouble(Evaluation::getScore)
                         ));
 
                 double weightedSum = 0;
-                int totalWeight = 0;
+                int totalWeight   = 0;
                 for (Criteria c : criteria) {
                     Double score = scoreByCriteria.get(c.getId());
-                    row.createCell(col++).setCellValue(score != null ? score : 0);
+                    row.createCell(col++).setCellValue(score != null ? score : 0.0);
                     if (score != null && c.getWeightPercent() != null) {
                         weightedSum += score * c.getWeightPercent();
                         totalWeight += c.getWeightPercent();
@@ -162,21 +167,23 @@ public class ReportingService {
                 }
 
                 double weightedAvg = totalWeight > 0 ? weightedSum / totalWeight : 0;
-                row.createCell(col++).setCellValue(
-                        Math.round(weightedAvg * 100.0) / 100.0);
+                row.createCell(col++).setCellValue(Math.round(weightedAvg * 100.0) / 100.0);
 
+                // Рекомендація — більшість голосів; при нічиї — алфавітно перший (детерміновано)
                 String recommendation = appEvals.stream()
                         .filter(e -> e.getRecommendation() != null)
                         .collect(Collectors.groupingBy(
                                 e -> e.getRecommendation().name(), Collectors.counting()))
                         .entrySet().stream()
-                        .max(Map.Entry.comparingByValue())
+                        .max(Comparator.comparingLong(Map.Entry<String, Long>::getValue)
+                                .thenComparing(Map.Entry.comparingByKey()))
                         .map(Map.Entry::getKey)
                         .orElse("PENDING");
                 row.createCell(col).setCellValue(recommendation);
             }
 
-            for (int i = 0; i <= col; i++) {
+            // Автоширина по фактичній кількості колонок заголовка
+            for (int i = 0; i < totalCols; i++) {
                 sheet.autoSizeColumn(i);
             }
 

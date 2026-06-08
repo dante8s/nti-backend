@@ -1,10 +1,6 @@
-package com.nti.nti_backend.application;
-
-import java.time.LocalDateTime;
-import java.util.UUID;
-
 public record ApplicationDTO(
         Long id,
+        Long applicantId,
         Long callId,
         String callTitle,
         String programName,
@@ -18,6 +14,7 @@ public record ApplicationDTO(
         String formData,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
-        String applicantName,
-        String applicantEmail
-) {}
+        List<MemberSnapshotDTO> teamMembers
+) {
+    public record MemberSnapshotDTO(Long userId, String email, String role) {}
+}

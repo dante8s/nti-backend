@@ -144,6 +144,19 @@ public class TeamController {
             if (!isAdmin(authUser) && !team.getLeader().getId().equals(authUser.getId())) {
                 return ResponseEntity.status(403).build();
             }
+
+            // Якщо вказано email і користувач не знайдений — запрошуємо незареєстрованого
+            if (userId == null && email != null && !email.isBlank()) {
+                var existing = userRepository.findByEmail(email.trim().toLowerCase())
+                        .or(() -> userRepository.findByEmail(email.trim()));
+                if (existing.isEmpty()) {
+                    TeamMember member = teamService.inviteUnregisteredByEmail(teamId, email.trim());
+                    return ResponseEntity.ok(toMemberResponse(member));
+                }
+                TeamMember member = teamService.inviteMember(teamId, existing.get().getId());
+                return ResponseEntity.ok(toMemberResponse(member));
+            }
+
             Long targetUserId = resolveInviteTargetUserId(userId, email);
             TeamMember member = teamService.inviteMember(teamId, targetUserId);
             return ResponseEntity.ok(toMemberResponse(member));

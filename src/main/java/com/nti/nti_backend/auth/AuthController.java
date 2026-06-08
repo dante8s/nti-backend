@@ -97,6 +97,15 @@ public class AuthController {
         );
     }
 
+    @PostMapping("/complete-team-invite")
+    public ResponseEntity<String> completeTeamMemberInvite(
+            @RequestBody CompleteOrgMemberInviteRequest request
+    ) {
+        return ResponseEntity.ok(
+                authService.completeTeamMemberInvite(request)
+        );
+    }
+
     @PostMapping("/admin/users/{id}/reject")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<String> rejectUser(
