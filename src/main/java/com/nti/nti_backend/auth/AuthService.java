@@ -1,10 +1,13 @@
 package com.nti.nti_backend.auth;
 
+import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.email.EmailService;
+import com.nti.nti_backend.exception.AppException;
 import com.nti.nti_backend.jwt.JwtUtil;
 import com.nti.nti_backend.recaptcha.RecaptchaService;
 import com.nti.nti_backend.user.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -26,31 +30,35 @@ public class AuthService {
     private final AuthenticationManager authManager;
     private final EmailService emailService;
     private final RecaptchaService recaptchaService;
+    private final AuditService auditService;
 
-    // Ролі які можна вибрати при реєстрації
     private static final Set<String> ALLOWED_ROLES =
             Set.of("STUDENT", "FIRM", "MENTOR");
 
     // -----------------------------------------------
     // РЕЄСТРАЦІЯ
     // -----------------------------------------------
-    public String register(RegisterRequest request) {
+    public String register(RegisterRequest request, String clientIp) {
         if (!recaptchaService.verify(request.captchaToken())) {
-            throw new RuntimeException("Captcha не пройдена. Спробуйте ще раз.");
+            throw AppException.badRequest("Captcha не пройдена. Спробуйте ще раз.");
         }
 
         if (!request.gdprConsent()) {
-            throw new RuntimeException("Потрібна згода на обробку даних");
+            throw AppException.badRequest("Потрібна згода на обробку даних");
+        }
+
+        if (!request.email().toLowerCase().endsWith("@student.ukf.sk")) {
+            throw AppException.badRequest("Реєстрація дозволена лише для адрес @student.ukf.sk");
         }
 
         for (String role : request.roles()) {
             if (!ALLOWED_ROLES.contains(role)) {
-                throw new RuntimeException("Недозволена роль: " + role);
+                throw AppException.badRequest("Недозволена роль: " + role);
             }
         }
 
         if (userRepository.existsByEmail(request.email())) {
-            throw new RuntimeException("Email вже зареєстрований");
+            throw AppException.conflict("Email вже зареєстрований");
         }
 
         Set<Role> roles = request.roles().stream()
@@ -69,6 +77,8 @@ public class AuthService {
                 .onboardingCompleted(false)
                 .enabled(false)
                 .accountStatus(AccountStatus.PENDING)
+                .gdprConsentedAt(LocalDateTime.now())
+                .gdprConsentIp(clientIp)
                 .build();
 
         userRepository.save(user);
@@ -76,56 +86,38 @@ public class AuthService {
         try {
             emailService.sendVerificationEmail(user.getEmail(), verificationToken);
         } catch (Exception e) {
-            System.out.println("Verification email failed");
+            log.warn("Verification email failed for: {}", user.getEmail(), e);
         }
-
-//        try {
-//            emailService.sendNewUserNotification(
-//                    user.getName(),
-//                    user.getEmail(),
-//                    roles.stream().map(Role::name).collect(Collectors.joining(", "))
-//            );
-//        } catch (Exception e) {
-//            System.out.println("Admin email failed");
-//        }
 
         return "Перевірте пошту і підтвердіть email. "
                 + "Після підтвердження очікуйте схвалення адміна.";
     }
 
     // -----------------------------------------------
-    // ЛОГІН — правильний порядок перевірок
+    // ЛОГІН
     // -----------------------------------------------
     public AuthResponse login(LoginRequest request) {
         if (!recaptchaService.verify(request.captchaToken())) {
-            throw new RuntimeException("Captcha не пройдена. Спробуйте ще раз.");
+            throw AppException.badRequest("Captcha не пройдена. Спробуйте ще раз.");
         }
 
         User user = userRepository
                 .findByEmail(request.email())
-                .orElseThrow(() -> new RuntimeException("Користувача не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Користувача не знайдено"));
 
-        // 1. Спочатку перевіряємо email — найбільш пріоритетно
         if (!user.isEmailVerified()) {
-            throw new RuntimeException("Підтвердіть email перед входом");
+            throw AppException.forbidden("Підтвердіть email перед входом");
         }
 
-        // 2. Потім статус акаунту
         switch (user.getAccountStatus()) {
-            case PENDING -> throw new RuntimeException(
-                    "Акаунт очікує схвалення адміністратора");
-            case REJECTED -> throw new RuntimeException(
-                    "Акаунт відхилено. Зверніться до адміністратора.");
-            case SUSPENDED -> throw new RuntimeException(
-                    "Акаунт заблоковано. Зверніться до адміністратора.");
+            case PENDING   -> throw AppException.forbidden("Акаунт очікує схвалення адміністратора");
+            case REJECTED  -> throw AppException.forbidden("Акаунт відхилено. Зверніться до адміністратора.");
+            case SUSPENDED -> throw AppException.forbidden("Акаунт заблоковано. Зверніться до адміністратора.");
             default -> { /* APPROVED — продовжуємо */ }
         }
 
-        // 3. Spring Security перевіряє пароль (може кинути BadCredentialsException)
         authManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.email(), request.password()
-                )
+                new UsernamePasswordAuthenticationToken(request.email(), request.password())
         );
 
         String token = jwtUtil.generateToken(user.getEmail());
@@ -147,13 +139,11 @@ public class AuthService {
     }
 
     // -----------------------------------------------
-    // ЗАПРОСИТИ МЕНТОРА (тільки SUPER_ADMIN або ADMIN)
-    // ----------------------------------------------
+    // ЗАПРОСИТИ МЕНТОРА
+    // -----------------------------------------------
     public void inviteMentor(String email) {
         if (userRepository.existsByEmail(email)) {
-            throw new RuntimeException(
-                    "Користувач з таким email вже існує"
-            );
+            throw AppException.conflict("Користувач з таким email вже існує");
         }
 
         String inviteToken = UUID.randomUUID().toString();
@@ -162,7 +152,7 @@ public class AuthService {
                 .name("")
                 .password("")
                 .roles(Set.of(Role.MENTOR))
-                .emailVerified(true) // mentors don't need to verify email
+                .emailVerified(true)
                 .enabled(false)
                 .accountStatus(AccountStatus.PENDING)
                 .inviteToken(inviteToken)
@@ -178,16 +168,14 @@ public class AuthService {
     public String completeInvite(CompleteInviteRequest request) {
         User user = userRepository
                 .findByInviteToken(request.inviteToken())
-                .orElseThrow(() -> new RuntimeException(
-                        "Невірний або прострочений токен запрошення"
-                ));
+                .orElseThrow(() -> AppException.badRequest("Невірний або прострочений токен запрошення"));
 
         if (request.name() == null || request.name().isBlank()) {
-            throw new RuntimeException("Name field is empty!");
+            throw AppException.badRequest("Name field is empty!");
         }
 
         if (request.password() == null || request.password().length() < 6) {
-            throw new RuntimeException("Minimal password length is 6 symbols");
+            throw AppException.badRequest("Minimal password length is 6 symbols");
         }
 
         user.setName(request.name());
@@ -195,15 +183,10 @@ public class AuthService {
         user.setInviteToken(null);
         userRepository.save(user);
 
-        // Send notification to admin to approve the user
         try {
-            emailService.sendNewUserNotification(
-                    user.getName(),
-                    user.getEmail(),
-                    "MENTOR"
-            );
+            emailService.sendNewUserNotification(user.getName(), user.getEmail(), "MENTOR");
         } catch (Exception e) {
-            System.out.println("Notification email failed");
+            log.warn("Notification email failed for: {}", user.getEmail(), e);
         }
 
         return "Реєстрацію завершено. Очікуйте схвалення адміністратора.";
@@ -215,16 +198,16 @@ public class AuthService {
     public String completeOrgMemberInvite(CompleteOrgMemberInviteRequest request) {
         User user = userRepository
                 .findByInviteToken(request.inviteToken())
-                .orElseThrow(() -> new RuntimeException(
-                        "Невірний або прострочений токен запрошення"
-                ));
+                .orElseThrow(() -> AppException.badRequest("Невірний або прострочений токен запрошення"));
+
         if (request.name() == null || request.name().isBlank()) {
-            throw new RuntimeException("Name field is empty!");
+            throw AppException.badRequest("Name field is empty!");
         }
 
         if (request.password() == null || request.password().length() < 6) {
-            throw new RuntimeException("Password length is 6+ symbols");
+            throw AppException.badRequest("Password length is 6+ symbols");
         }
+
         user.setName(request.name());
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setInviteToken(null);
@@ -235,64 +218,67 @@ public class AuthService {
         return "Реєстрацію завершено. Ви можете увійти в систему.";
     }
 
-
     // -----------------------------------------------
-    // СХВАЛЕННЯ АКАУНТУ (тільки SUPER_ADMIN)
+    // СХВАЛЕННЯ / ВІДХИЛЕННЯ / БЛОКУВАННЯ АКАУНТУ
     // -----------------------------------------------
-    public void approveUser(Long userId) {
+    public void approveUser(Long userId, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
 
         user.setAccountStatus(AccountStatus.APPROVED);
         user.setEnabled(true);
         userRepository.save(user);
 
         emailService.sendAccountApproved(user.getEmail(), user.getName());
+        auditService.log(actor, "USER_APPROVED", "USER", userId,
+                "Акаунт схвалено: " + user.getEmail());
     }
 
-    // -----------------------------------------------
-    // ВІДХИЛЕННЯ АКАУНТУ (тільки SUPER_ADMIN)
-    // -----------------------------------------------
-    public void rejectUser(Long userId, String reason) {
+    public void rejectUser(Long userId, String reason, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
 
         user.setAccountStatus(AccountStatus.REJECTED);
         user.setEnabled(false);
         userRepository.save(user);
 
         emailService.sendAccountRejected(user.getEmail(), user.getName(), reason);
+        auditService.log(actor, "USER_REJECTED", "USER", userId,
+                "Акаунт відхилено: " + user.getEmail() + ". Причина: " + reason);
     }
 
-    // -----------------------------------------------
-    // БЛОКУВАННЯ АКАУНТУ (тільки SUPER_ADMIN)
-    // -----------------------------------------------
-    public void suspendUser(Long userId, String reason) {
+    public void suspendUser(Long userId, String reason, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
 
         user.setAccountStatus(AccountStatus.SUSPENDED);
         user.setEnabled(false);
         userRepository.save(user);
 
         emailService.sendAccountSuspended(user.getEmail(), user.getName(), reason);
+        auditService.log(actor, "USER_SUSPENDED", "USER", userId,
+                "Акаунт заблоковано: " + user.getEmail() + ". Причина: " + reason);
     }
 
     // -----------------------------------------------
-    // ДОДАТИ / ЗАБРАТИ РОЛЬ (SUPER_ADMIN)
+    // ДОДАТИ / ЗАБРАТИ РОЛЬ
     // -----------------------------------------------
-    public void addRole(Long userId, Role role) {
+    public void addRole(Long userId, Role role, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
         user.getRoles().add(role);
         userRepository.save(user);
+        auditService.log(actor, "USER_ROLE_ADDED", "USER", userId,
+                "Роль " + role.name() + " додано для: " + user.getEmail());
     }
 
-    public void removeRole(Long userId, Role role) {
+    public void removeRole(Long userId, Role role, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
         user.getRoles().remove(role);
         userRepository.save(user);
+        auditService.log(actor, "USER_ROLE_REMOVED", "USER", userId,
+                "Роль " + role.name() + " видалено для: " + user.getEmail());
     }
 
     // -----------------------------------------------
@@ -301,9 +287,7 @@ public class AuthService {
     public String verifyEmail(String token) {
         User user = userRepository
                 .findByVerificationToken(token)
-                .orElseThrow(() ->
-                        new RuntimeException("Невірний токен")
-                );
+                .orElseThrow(() -> AppException.badRequest("Невірний токен"));
 
         if (user.isEmailVerified()) {
             return "Email вже підтверджений";
@@ -313,21 +297,17 @@ public class AuthService {
         user.setVerificationToken(null);
         userRepository.save(user);
 
-        // Повідомляємо адміна ПІСЛЯ підтвердження email
         try {
             emailService.sendNewUserNotification(
                     user.getName(),
                     user.getEmail(),
-                    user.getRoles().stream()
-                            .map(Role::name)
-                            .collect(Collectors.joining(", "))
+                    user.getRoles().stream().map(Role::name).collect(Collectors.joining(", "))
             );
         } catch (Exception e) {
-            System.out.println("Admin notification failed");
+            log.warn("Admin notification failed for: {}", user.getEmail(), e);
         }
 
-        return "Email підтверджено. "
-                + "Очікуйте схвалення адміністратора.";
+        return "Email підтверджено. Очікуйте схвалення адміністратора.";
     }
 
     // -----------------------------------------------
@@ -347,11 +327,11 @@ public class AuthService {
     public void resetPassword(ResetPasswordRequest request) {
         User user = userRepository
                 .findByResetPasswordToken(request.token())
-                .orElseThrow(() -> new RuntimeException("Невірний токен"));
+                .orElseThrow(() -> AppException.badRequest("Невірний токен"));
 
         if (user.getResetTokenExpiry() == null
                 || user.getResetTokenExpiry().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Токен прострочений");
+            throw AppException.badRequest("Токен прострочений");
         }
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));

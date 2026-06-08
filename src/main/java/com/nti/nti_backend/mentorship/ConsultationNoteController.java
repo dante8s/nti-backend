@@ -5,6 +5,7 @@ import com.nti.nti_backend.mentorship.dto.ConsultationNoteDTO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,26 +18,24 @@ public class ConsultationNoteController {
 
     private final ConsultationNoteService noteService;
 
-    // POST /api/consultation-notes
     @PostMapping
+    @PreAuthorize("hasRole('MENTOR')")
     public ResponseEntity<ConsultationNoteDTO> create(
             @Valid @RequestBody AddNoteRequestDTO dto
     ) {
         return ResponseEntity.status(201).body(noteService.create(dto));
     }
 
-    // GET /api/consultation-notes?applicationId=
     @GetMapping
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN','STUDENT')")
     public ResponseEntity<List<ConsultationNoteDTO>> getByApplication(
             @RequestParam Long applicationId
     ) {
-        return ResponseEntity.ok(
-                noteService.getByApplication(applicationId)
-        );
+        return ResponseEntity.ok(noteService.getByApplication(applicationId));
     }
 
-    // PUT /api/consultation-notes/{id}
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('MENTOR')")
     public ResponseEntity<ConsultationNoteDTO> update(
             @PathVariable UUID id,
             @Valid @RequestBody AddNoteRequestDTO dto
@@ -44,8 +43,8 @@ public class ConsultationNoteController {
         return ResponseEntity.ok(noteService.update(id, dto));
     }
 
-    // DELETE /api/consultation-notes/{id}
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Void> delete(
             @PathVariable UUID id
     ) {
