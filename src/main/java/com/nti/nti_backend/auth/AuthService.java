@@ -237,6 +237,31 @@ public class AuthService {
 
 
     // -----------------------------------------------
+    // ЗАВЕРШЕННЯ РЕЄСТРАЦІЇ ЧЛЕНА КОМАНДИ
+    // -----------------------------------------------
+    public String completeTeamMemberInvite(CompleteOrgMemberInviteRequest request) {
+        User user = userRepository
+                .findByInviteToken(request.inviteToken())
+                .orElseThrow(() -> new RuntimeException(
+                        "Невірний або прострочений токен запрошення"
+                ));
+        if (request.name() == null || request.name().isBlank()) {
+            throw new RuntimeException("Name field is empty!");
+        }
+        if (request.password() == null || request.password().length() < 6) {
+            throw new RuntimeException("Password length is 6+ symbols");
+        }
+        user.setName(request.name());
+        user.setPassword(passwordEncoder.encode(request.password()));
+        user.setInviteToken(null);
+        user.setEnabled(true);
+        user.setAccountStatus(AccountStatus.APPROVED);
+        userRepository.save(user);
+
+        return "Реєстрацію завершено. Ви можете увійти в систему та прийняти запрошення до команди.";
+    }
+
+    // -----------------------------------------------
     // СХВАЛЕННЯ АКАУНТУ (тільки SUPER_ADMIN)
     // -----------------------------------------------
     public void approveUser(Long userId) {

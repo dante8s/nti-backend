@@ -1,11 +1,13 @@
 package com.nti.nti_backend.controller;
 
+import com.nti.nti_backend.application.ApplicationMemberRepository;
 import com.nti.nti_backend.application.ApplicationRepository;
 import com.nti.nti_backend.evaluation.CommissionCriteriaDefaultSeeder;
 import com.nti.nti_backend.evaluation.Criteria;
 import com.nti.nti_backend.evaluation.CriteriaRepository;
 import com.nti.nti_backend.evaluation.Evaluation;
 import com.nti.nti_backend.evaluation.EvaluationService;
+import com.nti.nti_backend.team.TeamRepository;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import org.springframework.http.ResponseEntity;
@@ -24,15 +26,21 @@ public class ScoringController {
     private final EvaluationService evaluationService;
     private final CriteriaRepository criteriaRepository;
     private final ApplicationRepository applicationRepository;
+    private final ApplicationMemberRepository applicationMemberRepository;
+    private final TeamRepository teamRepository;
     private final CommissionCriteriaDefaultSeeder commissionCriteriaDefaultSeeder;
 
     public ScoringController(EvaluationService evaluationService,
                              CriteriaRepository criteriaRepository,
                              ApplicationRepository applicationRepository,
+                             ApplicationMemberRepository applicationMemberRepository,
+                             TeamRepository teamRepository,
                              CommissionCriteriaDefaultSeeder commissionCriteriaDefaultSeeder) {
         this.evaluationService = evaluationService;
         this.criteriaRepository = criteriaRepository;
         this.applicationRepository = applicationRepository;
+        this.applicationMemberRepository = applicationMemberRepository;
+        this.teamRepository = teamRepository;
         this.commissionCriteriaDefaultSeeder = commissionCriteriaDefaultSeeder;
     }
 
@@ -147,7 +155,8 @@ public class ScoringController {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", app.getId());
                     row.put("status", app.getStatus() != null ? app.getStatus().name() : null);
-                    row.put("applicantId", app.getApplicant() != null ? app.getApplicant().getId() : null);
+                    Long applicantId = app.getApplicant() != null ? app.getApplicant().getId() : null;
+                    row.put("applicantId", applicantId);
                     row.put("applicantEmail", app.getApplicant() != null ? app.getApplicant().getEmail() : null);
                     row.put("applicantName", app.getApplicant() != null ? app.getApplicant().getName() : null);
                     String programName = null;
@@ -155,6 +164,27 @@ public class ScoringController {
                         programName = app.getCall().getProgram().getName();
                     }
                     row.put("programName", programName);
+                    // Назва команди
+                    String teamName = null;
+                    if (applicantId != null) {
+                        teamName = teamRepository.findByLeader_Id(applicantId)
+                                .map(com.nti.nti_backend.team.Team::getName)
+                                .orElse(null);
+                    }
+                    row.put("teamName", teamName);
+                    // Снапшот учасників на момент подачі
+                    List<Map<String, Object>> members = applicationMemberRepository
+                            .findByApplicationId(app.getId())
+                            .stream()
+                            .map(m -> {
+                                Map<String, Object> member = new LinkedHashMap<>();
+                                member.put("userId", m.getUserId());
+                                member.put("email", m.getEmail());
+                                member.put("role", m.getRole());
+                                return member;
+                            })
+                            .toList();
+                    row.put("teamMembers", members);
                     return row;
                 })
                 .toList();

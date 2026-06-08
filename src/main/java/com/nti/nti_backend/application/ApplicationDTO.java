@@ -1,10 +1,12 @@
 package com.nti.nti_backend.application;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record ApplicationDTO(
         Long id,
+        Long applicantId,
         Long callId,
         String callTitle,
         String programName,
@@ -15,7 +17,10 @@ public record ApplicationDTO(
         String organizationName,
         Long productOwnerId,
         String productOwnerName,
-        String formData,        // JSON-рядок з даними форми
+        String formData,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
-) {}
+        LocalDateTime updatedAt,
+        List<MemberSnapshotDTO> teamMembers
+) {
+    public record MemberSnapshotDTO(Long userId, String email, String role) {}
+}

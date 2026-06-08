@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.UUID;
@@ -193,6 +194,69 @@ public class ApplicationController {
             @PathVariable Long callId
     ) {
         return ResponseEntity.ok(appService.getByCall(callId));
+    }
+
+    /** Завершити проект — лідер команди */
+    @PatchMapping("/applications/{id}/complete")
+    @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
+    public ResponseEntity<?> completeProject(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appService.completeProject(id, user.getId(), false));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Завершити проект — адмін */
+    @PatchMapping("/admin/applications/{id}/complete")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> completeProjectAdmin(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appService.completeProject(id, user.getId(), true));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Список запитів на завершення — для адміна */
+    @GetMapping("/admin/applications/completion-requests")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> getCompletionRequests() {
+        return ResponseEntity.ok(appService.getCompletionRequests());
+    }
+
+    /** Адмін підтверджує завершення проекту */
+    @PatchMapping("/admin/applications/{id}/approve-completion")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> approveCompletion(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appService.approveCompletion(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /** Адмін відхиляє запит на завершення */
+    @PatchMapping("/admin/applications/{id}/reject-completion")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> rejectCompletion(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appService.rejectCompletion(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /** Історія проектів поточного користувача */
+    @GetMapping("/applications/my/projects")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ProjectHistoryDTO> getMyProjects(
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(appService.getMyProjects(user.getId()));
     }
 }
 

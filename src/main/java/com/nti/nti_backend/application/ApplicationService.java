@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -49,6 +50,7 @@ public class ApplicationService {
     private final DocumentRepository documentRepository;
     private final EmailService emailService;
     private final AuditService auditService;
+    private final ApplicationMemberRepository applicationMemberRepository;
 
     private static final Map<ApplicationStatus,
             List<ApplicationStatus>> ALLOWED = Map.of(
@@ -63,7 +65,11 @@ public class ApplicationService {
                     ApplicationStatus.NEEDS_REVISION
             ),
             ApplicationStatus.NEEDS_REVISION,
-            List.of(ApplicationStatus.SUBMITTED)
+            List.of(ApplicationStatus.SUBMITTED),
+            ApplicationStatus.APPROVED,
+            List.of(ApplicationStatus.COMPLETION_REQUESTED),
+            ApplicationStatus.COMPLETION_REQUESTED,
+            List.of(ApplicationStatus.COMPLETED, ApplicationStatus.APPROVED)
     );
 
     // Створити draft
@@ -82,6 +88,12 @@ public class ApplicationService {
         }
 
         assertApplicantIsTeamLeader(applicant);
+
+        // Команда не може мати більше одного активного проекту
+        if (appRepository.existsApprovedByApplicantId(applicant.getId())) {
+            throw new IllegalStateException(
+                    "Команда вже має активний проект. Завершіть поточний проект перш ніж подавати нову заявку.");
+        }
 
         Call call = callRepository
                 .findById(request.callId())
@@ -148,12 +160,26 @@ public class ApplicationService {
     }
 
     // Відправити заявку
+    @Transactional
     public ApplicationDTO submit(
             Long appId, Long userId) {
 
         Application app = findAndCheckOwner(appId, userId);
         assertApplicantIsTeamLeader(app.getApplicant());
         assertTeamIsFullyAssembled(app.getApplicant());
+
+        // Перевірка: не можна відправити нову заявку якщо команда вже має активний проект
+        // (виключаємо саму цю заявку, щоб дати змогу повторно відправити після NEEDS_REVISION)
+        boolean hasOtherActiveProject = appRepository
+                .existsByApplicantIdAndStatusInAndIdNot(
+                        app.getApplicant().getId(),
+                        List.of(ApplicationStatus.APPROVED, ApplicationStatus.COMPLETION_REQUESTED),
+                        app.getId()
+                );
+        if (hasOtherActiveProject) {
+            throw new IllegalStateException(
+                    "Команда вже має активний проект. Завершіть поточний проект перш ніж подавати нову заявку.");
+        }
 
         validateTransition(
                 app.getStatus(), ApplicationStatus.SUBMITTED
@@ -185,6 +211,19 @@ public class ApplicationService {
 
         app.setStatus(ApplicationStatus.SUBMITTED);
         Application saved = appRepository.save(app);
+
+        // Зберігаємо снапшот складу команди на момент подачі
+        List<com.nti.nti_backend.teamMember.TeamMember> members =
+                teamMemberRepository.findAcceptedMembersByTeamLeader(app.getApplicant().getId());
+        for (com.nti.nti_backend.teamMember.TeamMember m : members) {
+            ApplicationMember snap = ApplicationMember.builder()
+                    .application(saved)
+                    .userId(m.getUser().getId())
+                    .email(m.getUser().getEmail())
+                    .role(m.getRole().name())
+                    .build();
+            applicationMemberRepository.save(snap);
+        }
 
         auditService.log(
                 app.getApplicant(),
@@ -354,13 +393,20 @@ public class ApplicationService {
     }
 
     @Transactional(readOnly = true)
-    public List<ApplicationDTO> getMyApplications(
-            Long userId) {
-        return appRepository
-                .findByApplicantIdWithDetails(userId)
-                .stream()
-                .map(this::toDTO)
-                .toList();
+    public List<ApplicationDTO> getMyApplications(Long userId) {
+        // Якщо користувач — лідер, повертаємо його власні заявки
+        if (teamRepository.findByLeader_Id(userId).isPresent()) {
+            return appRepository.findByApplicantIdWithDetails(userId)
+                    .stream().map(this::toDTO).toList();
+        }
+
+        // Якщо учасник — повертаємо заявки лідера своєї команди
+        return teamRepository.findAcceptedTeamsByUserId(userId)
+                .stream().findFirst()
+                .map(team -> appRepository
+                        .findByApplicantIdWithDetails(team.getLeader().getId())
+                        .stream().map(this::toDTO).toList())
+                .orElse(List.of());
     }
 
     // Одна заявка
@@ -476,6 +522,157 @@ public class ApplicationService {
                 .toList();
     }
 
+    /** Завершити проект — лідер або адмін */
+    /** Лідер надсилає запит на завершення проекту */
+    public ApplicationDTO completeProject(Long appId, Long userId, boolean isAdmin) {
+        Application app = appRepository.findById(appId)
+                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+
+        if (!isAdmin) {
+            boolean isLeader = teamRepository.findByLeader_Id(userId)
+                    .map(team -> app.getApplicant().getId().equals(userId))
+                    .orElse(false);
+            if (!isLeader) {
+                throw new RuntimeException("Тільки лідер команди може надіслати запит на завершення");
+            }
+            validateTransition(app.getStatus(), ApplicationStatus.COMPLETION_REQUESTED);
+            app.setStatus(ApplicationStatus.COMPLETION_REQUESTED);
+            Application saved = appRepository.save(app);
+            auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
+                    "Лідер надіслав запит на завершення проекту");
+            return toDTO(saved);
+        }
+
+        // Адмін — одразу завершує
+        validateTransition(app.getStatus(), ApplicationStatus.COMPLETED);
+        app.setStatus(ApplicationStatus.COMPLETED);
+        Application saved = appRepository.save(app);
+        auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId, "Проект завершено адміном");
+        return toDTO(saved);
+    }
+
+    /** Адмін підтверджує завершення */
+    public ApplicationDTO approveCompletion(Long appId) {
+        Application app = appRepository.findById(appId)
+                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+        if (app.getStatus() != ApplicationStatus.COMPLETION_REQUESTED) {
+            throw new RuntimeException("Заявка не перебуває у статусі запиту на завершення");
+        }
+        validateTransition(app.getStatus(), ApplicationStatus.COMPLETED);
+        app.setStatus(ApplicationStatus.COMPLETED);
+        Application saved = appRepository.save(app);
+        auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
+                "Адмін підтвердив завершення проекту");
+        return toDTO(saved);
+    }
+
+    /** Адмін відхиляє запит на завершення — повертає APPROVED, повідомляє лідера */
+    public ApplicationDTO rejectCompletion(Long appId) {
+        Application app = appRepository.findById(appId)
+                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+        if (app.getStatus() != ApplicationStatus.COMPLETION_REQUESTED) {
+            throw new RuntimeException("Заявка не перебуває у статусі запиту на завершення");
+        }
+        validateTransition(app.getStatus(), ApplicationStatus.APPROVED);
+        app.setStatus(ApplicationStatus.APPROVED);
+        Application saved = appRepository.save(app);
+        auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
+                "Адмін відхилив запит на завершення проекту");
+        try {
+            emailService.sendCompletionRejected(
+                    app.getApplicant().getEmail(),
+                    app.getApplicant().getName(),
+                    app.getCall().getProgram().getName()
+            );
+        } catch (Exception ignored) {}
+        return toDTO(saved);
+    }
+
+    /** Список заявок зі статусом COMPLETION_REQUESTED для адміна */
+    @Transactional(readOnly = true)
+    public List<ApplicationDTO> getCompletionRequests() {
+        return appRepository.findByStatus(ApplicationStatus.COMPLETION_REQUESTED)
+                .stream()
+                .map(this::toDTO)
+                .toList();
+    }
+
+    /** Проекти користувача: активний (APPROVED) та завершені (COMPLETED) */
+    @Transactional(readOnly = true)
+    public ProjectHistoryDTO getMyProjects(Long userId) {
+        Set<Long> allIds = new java.util.HashSet<>();
+
+        // Чи є userId зараз лідером якоїсь команди?
+        boolean isCurrentLeader = teamRepository.findByLeader_Id(userId).isPresent();
+
+        // ID поточного лідера команди (якщо userId є учасником)
+        Long myLeaderId = null;
+        if (!isCurrentLeader) {
+            myLeaderId = teamRepository.findAcceptedTeamsByUserId(userId)
+                    .stream().findFirst()
+                    .map(team -> team.getLeader().getId())
+                    .orElse(null);
+        }
+
+        if (isCurrentLeader) {
+            // Лідер: бачить всі свої заявки (APPROVED + COMPLETED)
+            appRepository.findByApplicantId(userId)
+                    .stream().map(Application::getId)
+                    .forEach(allIds::add);
+        } else if (myLeaderId != null) {
+            // Учасник: бачить тільки заявки свого ПОТОЧНОГО лідера де є у снапшоті
+            Set<Long> snapshotIds = new java.util.HashSet<>(
+                    applicationMemberRepository.findApplicationIdsByUserId(userId));
+            appRepository.findByApplicantId(myLeaderId)
+                    .stream().map(Application::getId)
+                    .filter(snapshotIds::contains)
+                    .forEach(allIds::add);
+        }
+        // Якщо користувач не лідер і не учасник жодної команди — показуємо порожньо
+
+        List<Application> apps = appRepository.findAllById(allIds)
+                .stream()
+                .filter(a -> a.getStatus() == ApplicationStatus.APPROVED
+                        || a.getStatus() == ApplicationStatus.COMPLETION_REQUESTED
+                        || a.getStatus() == ApplicationStatus.COMPLETED)
+                .toList();
+
+        ProjectHistoryDTO.ProjectEntryDTO current = null;
+        List<ProjectHistoryDTO.ProjectEntryDTO> history = new ArrayList<>();
+
+        for (Application a : apps) {
+            List<ApplicationDTO.MemberSnapshotDTO> members =
+                    applicationMemberRepository.findByApplicationId(a.getId())
+                            .stream()
+                            .map(m -> new ApplicationDTO.MemberSnapshotDTO(
+                                    m.getUserId(), m.getEmail(), m.getRole()))
+                            .toList();
+
+            String teamName = teamRepository.findByLeader_Id(a.getApplicant().getId())
+                    .map(t -> t.getName()).orElse(null);
+
+            ProjectHistoryDTO.ProjectEntryDTO entry = new ProjectHistoryDTO.ProjectEntryDTO(
+                    a.getId(),
+                    a.getStatus().name(),
+                    a.getCall().getProgram().getName(),
+                    a.getCall().getTitle(),
+                    teamName,
+                    a.getCreatedAt(),
+                    a.getUpdatedAt(),
+                    members
+            );
+
+            if (a.getStatus() == ApplicationStatus.APPROVED
+                    || a.getStatus() == ApplicationStatus.COMPLETION_REQUESTED) {
+                current = entry;
+            } else {
+                history.add(entry);
+            }
+        }
+
+        return new ProjectHistoryDTO(current, history);
+    }
+
     // Валідація переходу між статусами
     private void validateTransition(
             ApplicationStatus current,
@@ -520,8 +717,15 @@ public class ApplicationService {
             productOwnerName = a.getProductOwner().getName();
         }
 
+        List<ApplicationDTO.MemberSnapshotDTO> teamMembers =
+                applicationMemberRepository.findByApplicationId(a.getId())
+                        .stream()
+                        .map(m -> new ApplicationDTO.MemberSnapshotDTO(m.getUserId(), m.getEmail(), m.getRole()))
+                        .toList();
+
         return new ApplicationDTO(
                 a.getId(),
+                a.getApplicant().getId(),
                 a.getCall().getId(),
                 a.getCall().getTitle(),
                 a.getCall().getProgram().getName(),
@@ -534,7 +738,8 @@ public class ApplicationService {
                 productOwnerName,
                 a.getFormData(),
                 a.getCreatedAt(),
-                a.getUpdatedAt()
+                a.getUpdatedAt(),
+                teamMembers
         );
     }
 

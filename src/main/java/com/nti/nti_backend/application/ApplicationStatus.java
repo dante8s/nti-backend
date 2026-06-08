@@ -6,5 +6,7 @@ public enum ApplicationStatus {
     IN_REVIEW,
     NEEDS_REVISION,
     APPROVED,
-    REJECTED
+    REJECTED,
+    COMPLETION_REQUESTED,
+    COMPLETED
 }

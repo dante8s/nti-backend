@@ -1,7 +1,11 @@
 package com.nti.nti_backend.team;
 
+import com.nti.nti_backend.application.ApplicationRepository;
+import com.nti.nti_backend.email.EmailService;
 import com.nti.nti_backend.teamMember.TeamMember;
 import com.nti.nti_backend.teamMember.TeamMemberRepository;
+import com.nti.nti_backend.user.AccountStatus;
+import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -10,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -18,13 +24,19 @@ public class TeamService {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
+    private final ApplicationRepository applicationRepository;
+    private final EmailService emailService;
 
     public TeamService(TeamRepository teamRepository,
                        TeamMemberRepository teamMemberRepository,
-                       UserRepository userRepository) {
+                       UserRepository userRepository,
+                       ApplicationRepository applicationRepository,
+                       EmailService emailService) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.userRepository = userRepository;
+        this.applicationRepository = applicationRepository;
+        this.emailService = emailService;
     }
 
     public Team createTeam(Team team) {
@@ -84,6 +96,9 @@ public class TeamService {
         if (team.getLeader().getId().equals(invitedUserId)) {
             throw new IllegalStateException("Лідер не може запросити сам себе");
         }
+        if (applicationRepository.existsApprovedByApplicantId(team.getLeader().getId())) {
+            throw new IllegalStateException("Не можна запрошувати учасників: команда має схвалену заявку на програму");
+        }
         User invitedUser = userRepository.findById(invitedUserId)
                 .orElseThrow(() -> new IllegalStateException(
                         "Користувача з id " + invitedUserId + " не існує в системі."));
@@ -122,6 +137,45 @@ public class TeamService {
         invite.setInvitedAt(LocalDateTime.now());
 
         return teamMemberRepository.save(invite);
+    }
+
+    public TeamMember inviteUnregisteredByEmail(Long teamId, String email) {
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new IllegalStateException("Команду не знайдено"));
+
+        if (applicationRepository.existsApprovedByApplicantId(team.getLeader().getId())) {
+            throw new IllegalStateException("Не можна запрошувати учасників: команда має схвалену заявку на програму");
+        }
+
+        long currentSize = teamMemberRepository.countAcceptedMembers(teamId);
+        if (currentSize >= team.getMaxCapacity()) {
+            throw new IllegalStateException("У команді вже максимум учасників");
+        }
+
+        String inviteToken = UUID.randomUUID().toString();
+        User placeholder = User.builder()
+                .email(email.trim().toLowerCase())
+                .name("")
+                .password("")
+                .roles(Set.of(Role.STUDENT))
+                .emailVerified(true)
+                .enabled(false)
+                .accountStatus(AccountStatus.PENDING)
+                .inviteToken(inviteToken)
+                .build();
+        userRepository.save(placeholder);
+
+        TeamMember invite = new TeamMember();
+        invite.setTeam(team);
+        invite.setUser(placeholder);
+        invite.setRole(TeamMember.TeamRole.MEMBER);
+        invite.setInviteStatus(TeamMember.InviteStatus.PENDING);
+        invite.setInvitedAt(LocalDateTime.now());
+        TeamMember saved = teamMemberRepository.save(invite);
+
+        emailService.sendTeamInviteToUnregistered(email, team.getName(), inviteToken);
+
+        return saved;
     }
 
     public TeamMember respondToInvitation(Long teamId, Long userId, boolean accepted) {
@@ -185,6 +239,9 @@ public class TeamService {
         if (team.getLeader().getId().equals(memberUserId)) {
             throw new IllegalStateException("Leader cannot be removed from the team");
         }
+        if (!admin && applicationRepository.existsApprovedByApplicantId(team.getLeader().getId())) {
+            throw new IllegalStateException("Не можна змінювати склад команди: є схвалена заявка на програму");
+        }
         TeamMember membership = teamMemberRepository.findByTeam_IdAndUser_Id(teamId, memberUserId)
             .orElseThrow(() -> new IllegalStateException("Учасника не знайдено в цій команді"));
 
@@ -237,6 +294,9 @@ public class TeamService {
         Long leaderId = team.getLeader().getId();
         if (!admin && !leaderId.equals(requesterUserId)) {
             throw new IllegalStateException("Лише лідер команди може її видалити");
+        }
+        if (!admin && applicationRepository.existsApprovedByApplicantId(leaderId)) {
+            throw new IllegalStateException("Не можна видалити команду: є схвалена заявка на програму");
         }
 
         teamMemberRepository.deleteByTeam_Id(teamId);
