@@ -166,4 +166,12 @@ public class EmailService {
                 "projectTitle", projectTitle
         ));
     }
+
+    @Async
+    public void sendBulkMessage(String to, String subject, String body) {
+        send(to, EmailTemplateType.BULK_MESSAGE, Map.of(
+                "subject", subject,
+                "body",    body
+        ));
+    }
 }

@@ -33,15 +33,15 @@ public class GdprService {
     public Map<String, Object> exportData(User user) {
         Map<String, Object> data = new LinkedHashMap<>();
 
-        data.put("account", Map.of(
-                "id",              user.getId(),
-                "name",            user.getName(),
-                "email",           user.getEmail(),
-                "roles",           user.getRoles().stream().map(Enum::name).toList(),
-                "createdAt",       user.getCreatedAt(),
-                "gdprConsentedAt", user.getGdprConsentedAt() != null
-                                       ? user.getGdprConsentedAt().toString() : null
-        ));
+        Map<String, Object> account = new LinkedHashMap<>();
+        account.put("id",              user.getId());
+        account.put("name",            user.getName());
+        account.put("email",           user.getEmail());
+        account.put("roles",           user.getRoles().stream().map(Enum::name).toList());
+        account.put("createdAt",       user.getCreatedAt());
+        account.put("gdprConsentedAt", user.getGdprConsentedAt() != null
+                                           ? user.getGdprConsentedAt().toString() : null);
+        data.put("account", account);
 
         studentProfileRepository.findByUser_Id(user.getId()).ifPresent(sp ->
                 data.put("studentProfile", Map.of(
@@ -54,34 +54,40 @@ public class GdprService {
 
         var applications = applicationRepository.findByApplicantIdWithDetails(user.getId())
                 .stream()
-                .map(a -> Map.of(
-                        "id",        a.getId(),
-                        "call",      a.getCall().getTitle(),
-                        "program",   a.getCall().getProgram().getName(),
-                        "status",    a.getStatus().name(),
-                        "createdAt", a.getCreatedAt()
-                ))
+                .map(a -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id",        a.getId());
+                    m.put("call",      a.getCall().getTitle());
+                    m.put("program",   a.getCall().getProgram().getName());
+                    m.put("status",    a.getStatus().name());
+                    m.put("createdAt", a.getCreatedAt());
+                    return m;
+                })
                 .toList();
         data.put("applications", applications);
 
         var notifications = notificationRepository
                 .findByUserIdOrderByCreatedAtDesc(user.getId())
                 .stream()
-                .map(n -> Map.of(
-                        "type",      n.getType().name(),
-                        "title",     n.getTitle(),
-                        "createdAt", n.getCreatedAt()
-                ))
+                .map(n -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("type",      n.getType().name());
+                    m.put("title",     n.getTitle() != null ? n.getTitle() : "");
+                    m.put("createdAt", n.getCreatedAt());
+                    return m;
+                })
                 .toList();
         data.put("notifications", notifications);
 
         var auditEvents = auditRepository.findByActor_IdOrderByCreatedAtDesc(user.getId())
                 .stream()
-                .map(e -> Map.of(
-                        "action",    e.getAction(),
-                        "entity",    e.getEntityType(),
-                        "createdAt", e.getCreatedAt()
-                ))
+                .map(e -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("action",    e.getAction() != null ? e.getAction() : "");
+                    m.put("entity",    e.getEntityType() != null ? e.getEntityType() : "");
+                    m.put("createdAt", e.getCreatedAt());
+                    return m;
+                })
                 .toList();
         data.put("auditEvents", auditEvents);
 

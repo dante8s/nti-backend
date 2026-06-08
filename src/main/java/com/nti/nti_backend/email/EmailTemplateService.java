@@ -236,6 +236,15 @@ public class EmailTemplateService {
 
                 Команда NTI""",
                 "{{name}},{{projectTitle}}");
+
+        seed(EmailTemplateType.BULK_MESSAGE,
+                "{{subject}}",
+                """
+                {{body}}
+
+                --
+                Це повідомлення надіслано адміністратором NTI. Не відповідайте на цей лист.""",
+                "subject,body");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
