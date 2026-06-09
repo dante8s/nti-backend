@@ -95,7 +95,7 @@ public class MentorshipController {
     }
 
     @GetMapping("/consultations")
-    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN','STUDENT')")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN','STUDENT', 'FIRM')")
     public ResponseEntity<List<ConsultationResponseDTO>> getConsultationsByMentorship(
             @RequestParam UUID mentorshipId
     ) {

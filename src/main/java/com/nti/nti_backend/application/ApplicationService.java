@@ -411,8 +411,15 @@ public class ApplicationService {
             }
         }
 
-        return viewer.hasRole(Role.STUDENT)
-                && app.getApplicant().getId().equals(viewer.getId());
+        if (viewer.hasRole(Role.STUDENT)) {
+            boolean isApplicant = app.getApplicant() != null && app.getApplicant().getId().equals(viewer.getId());
+            boolean isTeamMember = app.getTeamSnapshot() != null && app.getTeamSnapshot().stream()
+                    .anyMatch(member -> member.getUserId() != null && member.getUserId().equals(viewer.getId()));
+
+            return isApplicant || isTeamMember;
+        }
+
+        return false;
     }
 
     // Тільки не-чернетки для адміна

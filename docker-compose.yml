@@ -1,6 +1,6 @@
 
 volumes:
-  nti:
+
   redis-data:
 
 services:

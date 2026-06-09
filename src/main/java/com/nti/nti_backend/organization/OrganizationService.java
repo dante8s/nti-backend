@@ -494,13 +494,15 @@ public class OrganizationService {
             );
         }
 
-        String path = saveFile(file, programId, "spec");
 
         ProgramBRequirements req = requirementsRepository.
                 findByProgramId(programId)
                 .orElse(ProgramBRequirements.builder()
                         .program(program)
                         .build());
+        deleteFileIfExists(req.getSpecificationPath());
+        String path = saveFile(file, programId, "spec");
+
         req.setSpecificationName(file.getOriginalFilename());
         req.setSpecificationPath(path);
 
@@ -531,13 +533,16 @@ public class OrganizationService {
             throw new ConflictException("You do not own this Program B");
         }
 
-        String path = saveFile(file, programId, "budget");
         ProgramBRequirements req = requirementsRepository
                 .findByProgramId(programId)
                 .orElse(ProgramBRequirements.builder()
                         .program(program)
                         .build()
                 );
+        deleteFileIfExists(req.getBudgetPath());
+        String path = saveFile(file, programId, "budget");
+
+
         req.setBudgetName(file.getOriginalFilename());
         req.setBudgetPath(path);
 
@@ -642,6 +647,17 @@ public class OrganizationService {
         || currentUser.hasRole(Role.STUDENT)) return;
 
         throw new ConflictException("You do not have access to this file");
+    }
+
+    private void deleteFileIfExists(String filePath) {
+        if (filePath != null && !filePath.isEmpty()) {
+            try {
+                Path path = Paths.get(filePath);
+                Files.deleteIfExists(path);
+            } catch (IOException e) {
+                System.err.println("Could not delete file: " + filePath + " - " + e.getMessage());
+            }
+        }
     }
 
     private ProgramBRequirementsDTO toProgramBRequirementsDTO(ProgramBRequirements r) {

@@ -5,9 +5,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS,
-        include = JsonTypeInfo.As.PROPERTY,
-        property = "@class")
+
 public record ApplicationDTO(
         Long id,
         Long applicantId,
@@ -26,8 +24,5 @@ public record ApplicationDTO(
         LocalDateTime updatedAt,
         List<MemberSnapshotDTO> teamMembers
 ) {
-    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS,
-            include = JsonTypeInfo.As.PROPERTY,
-            property = "@class")
     public record MemberSnapshotDTO(Long userId, String email, String role) {}
 }
