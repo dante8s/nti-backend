@@ -131,34 +131,20 @@ public class EmailService {
         ));
     }
 
-    // Відхилення запиту на завершення проекту (тільки лідеру)
     @Async
     public void sendCompletionRejected(String to, String leaderName, String projectName) {
-        send(
-                to,
-                "NTI — Запит на завершення проекту відхилено",
-                "Вітаємо, " + leaderName + "!\n\n"
-                        + "Адміністратор відхилив ваш запит на завершення проекту «" + projectName + "».\n\n"
-                        + "Проект залишається активним. Якщо у вас є питання — зверніться до адміністратора.\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.COMPLETION_REJECTED, Map.of(
+                "name",        leaderName,
+                "projectName", projectName
+        ));
     }
-    // Запрошення незареєстрованого користувача до команди
+
     @Async
     public void sendTeamInviteToUnregistered(String to, String teamName, String token) {
-        String link = frontendUrl + "/complete-team-invite?token=" + token;
-        send(
-                to,
-                "NTI — Запрошення до команди «" + teamName + "»",
-                "Вітаємо!\n\n"
-                        + "Вас запрошують до команди «" + teamName + "» на платформі NTI.\n\n"
-                        + "Для того щоб прийняти участь, перейдіть за посиланням:\n\n"
-                        + link + "\n\n"
-                        + "Вам потрібно буде вказати ваше ім'я та пароль.\n"
-                        + "Після реєстрації ви зможете прийняти або відхилити запрошення в особистому кабінеті.\n\n"
-                        + "Посилання дійсне 7 днів.\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.TEAM_INVITE_UNREGISTERED, Map.of(
+                "teamName", teamName,
+                "link",     frontendUrl + "/complete-team-invite?token=" + token
+        ));
     }
 
     // Блокування акаунту

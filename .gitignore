@@ -2,6 +2,9 @@
 
 HELP.md
 
+# Environment secrets — copy .env.example → .env and fill in values
+.env
+
 # Build output (never commit)
 target/
 
