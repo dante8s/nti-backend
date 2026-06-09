@@ -1,5 +1,6 @@
 package com.nti.nti_backend.controller;
 
+import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.evaluation.CriteriaRepository;
 import com.nti.nti_backend.evaluation.EvaluationRepository;
 import com.nti.nti_backend.reporting.ReportingService;
@@ -37,17 +38,20 @@ public class ReportingController {
     private final EvaluationRepository evaluationRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final TeamRepository teamRepository;
+    private final AuditService auditService;
 
-    public ReportingController(ReportingService reportingService ,
-                               CriteriaRepository criteriaRepository ,
+    public ReportingController(ReportingService reportingService,
+                               CriteriaRepository criteriaRepository,
                                EvaluationRepository evaluationRepository,
                                StudentProfileRepository studentProfileRepository,
-                               TeamRepository teamRepository) {
+                               TeamRepository teamRepository,
+                               AuditService auditService) {
         this.reportingService = reportingService;
-        this.criteriaRepository =criteriaRepository;
+        this.criteriaRepository = criteriaRepository;
         this.evaluationRepository = evaluationRepository;
-        this.teamRepository =teamRepository;
+        this.teamRepository = teamRepository;
         this.studentProfileRepository = studentProfileRepository;
+        this.auditService = auditService;
     }
 
     // ── GET /api/reporting/export/{callId} ────────────────────────────────────
@@ -56,9 +60,12 @@ public class ReportingController {
 
     @GetMapping("/export/{callId}")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<byte[]> exportEvaluatorReport(@PathVariable Long callId) {
+    public ResponseEntity<byte[]> exportEvaluatorReport(
+            @PathVariable Long callId,
+            @AuthenticationPrincipal User actor) {
         try {
             byte[] xlsx = reportingService.generateEvaluationReport(callId);
+            auditService.log(actor, "EXPORT", "CALL", callId, "Експорт XLSX звіту оцінювання");
 
             // Build filename: evaluation_report_2026-04-01.xlsx
             String filename = "evaluation_report_"
@@ -136,8 +143,11 @@ public class ReportingController {
             @RequestParam(required = false) String applicationStatus,
             @RequestParam(required = false) Boolean linkedToCall,
             @RequestParam(required = false) Boolean winnerOnly,
-            @RequestParam(required = false) Integer minMembers) {
+            @RequestParam(required = false) Integer minMembers,
+            @AuthenticationPrincipal User actor) {
         try {
+            auditService.log(actor, "EXPORT", null, callId,
+                    "Експорт " + format.toUpperCase() + " звіту типу: " + reportType);
             String type = reportType == null ? "applications" : reportType.trim().toLowerCase(Locale.ROOT);
             byte[] body = switch (type) {
                 case "teams" -> reportingService.exportTeamsReport(

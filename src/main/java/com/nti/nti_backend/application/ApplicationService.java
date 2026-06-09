@@ -3,15 +3,18 @@ package com.nti.nti_backend.application;
 import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.call.Call;
 import com.nti.nti_backend.call.CallRepository;
+import com.nti.nti_backend.exception.AppException;
 import com.nti.nti_backend.team.TeamRepository;
 import com.nti.nti_backend.teamMember.TeamMemberRepository;
 import com.nti.nti_backend.email.EmailService;
+import com.nti.nti_backend.notification.NotificationService;
 import com.nti.nti_backend.program.ProgramType;
 import com.nti.nti_backend.report.ProjectReportService;
 import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.MediaType;
@@ -24,19 +27,20 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ApplicationService {
 
-    /** Віддача файлу документа заявки (перегляд / завантаження). */
     public record ServedApplicationDocument(
             Resource resource,
             MediaType contentType,
@@ -52,58 +56,59 @@ public class ApplicationService {
     private final EmailService emailService;
     private final AuditService auditService;
     private final ApplicationMemberRepository applicationMemberRepository;
+    private final NotificationService notificationService;
     private final ProjectReportService projectReportService;
-
-    private static final Map<ApplicationStatus,
-            List<ApplicationStatus>> ALLOWED = Map.of(
-            ApplicationStatus.DRAFT,
-            List.of(ApplicationStatus.SUBMITTED),
-            ApplicationStatus.SUBMITTED,
-            List.of(ApplicationStatus.IN_REVIEW),
-            ApplicationStatus.IN_REVIEW,
-            List.of(
-                    ApplicationStatus.APPROVED,
-                    ApplicationStatus.REJECTED,
-                    ApplicationStatus.NEEDS_REVISION
-            ),
-            ApplicationStatus.NEEDS_REVISION,
-            List.of(ApplicationStatus.SUBMITTED),
-            ApplicationStatus.APPROVED,
-            List.of(ApplicationStatus.COMPLETION_REQUESTED),
-            ApplicationStatus.COMPLETION_REQUESTED,
-            List.of(ApplicationStatus.COMPLETION_PO_APPROVED, ApplicationStatus.APPROVED, ApplicationStatus.COMPLETED),
-            ApplicationStatus.COMPLETION_PO_APPROVED,
-            List.of(ApplicationStatus.COMPLETED, ApplicationStatus.APPROVED)
+  
+    // Від main: повніша state machine з усіма статусами
+    private static final Map<ApplicationStatus, List<ApplicationStatus>> ALLOWED = Map.ofEntries(
+            Map.entry(ApplicationStatus.DRAFT,
+                    List.of(ApplicationStatus.SUBMITTED)),
+            Map.entry(ApplicationStatus.SUBMITTED,
+                    List.of(ApplicationStatus.FORMALLY_VERIFIED)),
+            Map.entry(ApplicationStatus.FORMALLY_VERIFIED,
+                    List.of(ApplicationStatus.IN_REVIEW)),
+            Map.entry(ApplicationStatus.IN_REVIEW,
+                    List.of(ApplicationStatus.APPROVED, ApplicationStatus.REJECTED,
+                            ApplicationStatus.NEEDS_REVISION)),
+            Map.entry(ApplicationStatus.NEEDS_REVISION,
+                    List.of(ApplicationStatus.SUBMITTED)),
+            Map.entry(ApplicationStatus.APPROVED,
+                    List.of(ApplicationStatus.ONBOARDING, ApplicationStatus.COMPLETION_REQUESTED)),
+            Map.entry(ApplicationStatus.ONBOARDING,
+                    List.of(ApplicationStatus.ACTIVE)),
+            Map.entry(ApplicationStatus.ACTIVE,
+                    List.of(ApplicationStatus.SUSPENDED, ApplicationStatus.ARCHIVED)),
+            Map.entry(ApplicationStatus.COMPLETION_PO_APPROVED,
+                    List.of(ApplicationStatus.COMPLETED, ApplicationStatus.APPROVED)),
+            Map.entry(ApplicationStatus.SUSPENDED,
+                    List.of(ApplicationStatus.ACTIVE, ApplicationStatus.ARCHIVED)),
+            Map.entry(ApplicationStatus.COMPLETION_REQUESTED,
+                    List.of(ApplicationStatus.COMPLETED, ApplicationStatus.APPROVED))
     );
 
     // Створити draft
-    public ApplicationDTO createDraft(
-            User applicant,
-            CreateApplicationRequest request) {
-
-        // Якщо заявка вже є — повертаємо її
-        // замість помилки
+    public ApplicationDTO createDraft(User applicant, CreateApplicationRequest request) {
         Optional<Application> existing =
-                appRepository.findByApplicantIdAndCallId(
-                        applicant.getId(), request.callId()
-                );
+                appRepository.findByApplicantIdAndCallId(applicant.getId(), request.callId());
         if (existing.isPresent()) {
             return toDTO(existing.get());
         }
 
         assertApplicantIsTeamLeader(applicant);
 
-        // Команда не може мати більше одного активного проекту
+        // Від Max: команда не може мати більше одного активного проекту
         if (appRepository.existsApprovedByApplicantId(applicant.getId())) {
             throw new IllegalStateException(
                     "Команда вже має активний проект. Завершіть поточний проект перш ніж подавати нову заявку.");
         }
 
-        Call call = callRepository
-                .findById(request.callId())
-                .orElseThrow(() ->
-                        new RuntimeException("Виклик не знайдено")
-                );
+        Call call = callRepository.findById(request.callId())
+                .orElseThrow(() -> AppException.notFound("Виклик не знайдено"));
+
+        // Від main: перевірка дедлайну
+        if (call.getDeadline() != null && LocalDateTime.now().isAfter(call.getDeadline())) {
+            throw AppException.badRequest("Термін подачі заявок для цього виклику закінчився");
+        }
 
         Application app = Application.builder()
                 .call(call)
@@ -113,67 +118,50 @@ public class ApplicationService {
 
         Application saved = appRepository.save(app);
 
-        auditService.log(
-                applicant,
-                "APPLICATION_CREATED",
-                "APPLICATION",
-                saved.getId(),
-                "Створено чернетку заявки"
-        );
+        auditService.log(applicant, "APPLICATION_CREATED", "APPLICATION", saved.getId(),
+                "Створено чернетку заявки");
 
         return toDTO(saved);
     }
 
     // Оновити дані форми (тільки DRAFT або NEEDS_REVISION)
-    public ApplicationDTO updateDraft(
-            Long appId,
-            Long userId,
-            UpdateApplicationRequest request) {
-
+    public ApplicationDTO updateDraft(Long appId, Long userId, UpdateApplicationRequest request) {
         Application app = findAndCheckOwner(appId, userId);
 
         if (app.getStatus() != ApplicationStatus.DRAFT
-                && app.getStatus()
-                != ApplicationStatus.NEEDS_REVISION) {
-            throw new RuntimeException(
-                    "Редагування доступне тільки для "
-                            + "чернеток або заявок що потребують правок"
-            );
+                && app.getStatus() != ApplicationStatus.NEEDS_REVISION) {
+            throw AppException.badRequest(
+                    "Редагування доступне тільки для чернеток або заявок що потребують правок");
         }
 
         app.setFormData(request.formData());
         Application saved = appRepository.save(app);
 
-        auditService.log(
-                app.getApplicant(),
-                "APPLICATION_UPDATED",
-                "APPLICATION",
-                appId,
-                "Оновлено дані заявки"
-        );
+        auditService.log(app.getApplicant(), "APPLICATION_UPDATED", "APPLICATION", appId,
+                "Оновлено дані заявки");
 
         return toDTO(saved);
     }
 
     // Знайти мою заявку для виклику
-    public Optional<ApplicationDTO> getMyByCall(
-            Long userId, Long callId) {
-        return appRepository
-                .findByApplicantIdAndCallId(userId, callId)
-                .map(this::toDTO);
+    public Optional<ApplicationDTO> getMyByCall(Long userId, Long callId) {
+        return appRepository.findByApplicantIdAndCallId(userId, callId).map(this::toDTO);
     }
 
     // Відправити заявку
     @Transactional
-    public ApplicationDTO submit(
-            Long appId, Long userId) {
-
+    public ApplicationDTO submit(Long appId, Long userId) {
         Application app = findAndCheckOwner(appId, userId);
         assertApplicantIsTeamLeader(app.getApplicant());
         assertTeamIsFullyAssembled(app.getApplicant());
 
-        // Перевірка: не можна відправити нову заявку якщо команда вже має активний проект
-        // (виключаємо саму цю заявку, щоб дати змогу повторно відправити після NEEDS_REVISION)
+        // Від main: перевірка дедлайну
+        Call call = app.getCall();
+        if (call.getDeadline() != null && LocalDateTime.now().isAfter(call.getDeadline())) {
+            throw AppException.badRequest("Термін подачі заявок для цього виклику закінчився");
+        }
+
+        // Від Max: не можна відправити якщо команда вже має активний проект
         boolean hasOtherActiveProject = appRepository
                 .existsByApplicantIdAndStatusInAndIdNot(
                         app.getApplicant().getId(),
@@ -185,17 +173,11 @@ public class ApplicationService {
                     "Команда вже має активний проект. Завершіть поточний проект перш ніж подавати нову заявку.");
         }
 
-        validateTransition(
-                app.getStatus(), ApplicationStatus.SUBMITTED
-        );
+        validateTransition(app.getStatus(), ApplicationStatus.SUBMITTED);
 
-        // Перевірка документів
-        ProgramType programType =
-                app.getCall().getProgram().getType();
-        List<RequiredDocument> required =
-                DocumentRequirements.forProgram(programType);
-        List<ApplicationDocument> uploaded =
-                documentRepository.findByApplicationId(appId);
+        ProgramType programType = app.getCall().getProgram().getType();
+        List<RequiredDocument> required = DocumentRequirements.forProgram(programType);
+        List<ApplicationDocument> uploaded = documentRepository.findByApplicationId(appId);
 
         Set<DocumentType> uploadedTypes = uploaded.stream()
                 .map(ApplicationDocument::getDocumentType)
@@ -207,16 +189,13 @@ public class ApplicationService {
                 .toList();
 
         if (!missing.isEmpty()) {
-            throw new RuntimeException(
-                    "Не вистачає документів: "
-                            + String.join(", ", missing)
-            );
+            throw AppException.badRequest("Не вистачає документів: " + String.join(", ", missing));
         }
 
         app.setStatus(ApplicationStatus.SUBMITTED);
         Application saved = appRepository.save(app);
 
-        // Зберігаємо снапшот складу команди на момент подачі
+        // Від Max: зберігаємо снапшот складу команди на момент подачі
         List<com.nti.nti_backend.teamMember.TeamMember> members =
                 teamMemberRepository.findAcceptedMembersByTeamLeader(app.getApplicant().getId());
         for (com.nti.nti_backend.teamMember.TeamMember m : members) {
@@ -229,28 +208,23 @@ public class ApplicationService {
             applicationMemberRepository.save(snap);
         }
 
-        auditService.log(
-                app.getApplicant(),
-                "STATUS_CHANGED",
-                "APPLICATION",
-                appId,
-                "Заявку відправлено на розгляд"
-        );
+        auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
+                "Заявку відправлено на розгляд");
 
-        emailService.sendApplicationStatusChanged(
-                app.getApplicant().getEmail(),
-                app.getApplicant().getName(),
-                "SUBMITTED", null
-        );
+        try {
+            emailService.sendApplicationStatusChanged(
+                    app.getApplicant().getEmail(), app.getApplicant().getName(),
+                    "SUBMITTED", null);
+        } catch (Exception e) {
+            log.warn("Failed to send submit email for application {}: {}", appId, e.getMessage());
+        }
 
         return toDTO(saved);
     }
 
     // Завантажити документ
-    public DocumentDTO saveDocument(
-            Long appId, Long userId,
-            String fileName, String filePath,
-            String fileType, DocumentType documentType) {
+    public DocumentDTO saveDocument(Long appId, Long userId,
+            String fileName, String filePath, String fileType, DocumentType documentType) {
 
         Application app = findAndCheckOwner(appId, userId);
 
@@ -266,15 +240,10 @@ public class ApplicationService {
             );
         }
 
-        // Якщо документ такого типу вже є — замінюємо
-        documentRepository
-                .findByApplicationIdAndDocumentType(
-                        appId, documentType
-                )
+        documentRepository.findByApplicationIdAndDocumentType(appId, documentType)
                 .ifPresent(documentRepository::delete);
 
-        ApplicationDocument doc = ApplicationDocument
-                .builder()
+        ApplicationDocument doc = ApplicationDocument.builder()
                 .application(app)
                 .fileName(fileName)
                 .filePath(filePath)
@@ -282,16 +251,10 @@ public class ApplicationService {
                 .documentType(documentType)
                 .build();
 
-        ApplicationDocument saved =
-                documentRepository.save(doc);
+        ApplicationDocument saved = documentRepository.save(doc);
 
-        auditService.log(
-                app.getApplicant(),
-                "DOCUMENT_UPLOADED",
-                "APPLICATION",
-                appId,
-                "Завантажено: " + fileName
-        );
+        auditService.log(app.getApplicant(), "DOCUMENT_UPLOADED", "APPLICATION", appId,
+                "Завантажено: " + fileName);
 
         return toDocumentDTO(saved);
     }
@@ -299,27 +262,17 @@ public class ApplicationService {
     // Статус документів
     public List<DocumentStatusDTO> getDocumentStatus(Long appId, User viewer) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() ->
-                        new RuntimeException("Заявку не знайдено")
-                );
+                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
         if (viewer == null || !canViewApplication(viewer, app)) {
-            throw new RuntimeException("Немає доступу");
+            throw AppException.forbidden("Немає доступу");
         }
 
-        ProgramType programType =
-                app.getCall().getProgram().getType();
-        List<RequiredDocument> required =
-                DocumentRequirements.forProgram(programType);
-        List<ApplicationDocument> uploaded =
-                documentRepository.findByApplicationId(appId);
+        ProgramType programType = app.getCall().getProgram().getType();
+        List<RequiredDocument> required = DocumentRequirements.forProgram(programType);
+        List<ApplicationDocument> uploaded = documentRepository.findByApplicationId(appId);
 
-        Map<DocumentType, ApplicationDocument> uploadedMap =
-                uploaded.stream().collect(
-                        Collectors.toMap(
-                                ApplicationDocument::getDocumentType,
-                                d -> d
-                        )
-                );
+        Map<DocumentType, ApplicationDocument> uploadedMap = uploaded.stream()
+                .collect(Collectors.toMap(ApplicationDocument::getDocumentType, d -> d));
 
         List<DocumentStatusDTO> result = new java.util.ArrayList<>(
                 required.stream()
@@ -359,49 +312,43 @@ public class ApplicationService {
         return result;
     }
 
-    /**
-     * Файл обов'язкового документа для перегляду/завантаження (з диска).
-     */
     public ServedApplicationDocument serveApplicationDocument(
-            Long applicationId,
-            DocumentType documentType,
-            User viewer
-    ) {
+            Long applicationId, DocumentType documentType, User viewer) {
+
         Application app = appRepository.findById(applicationId)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
         if (viewer == null || !canViewApplication(viewer, app)) {
-            throw new RuntimeException("Немає доступу");
+            throw AppException.forbidden("Немає доступу");
         }
         ApplicationDocument doc = documentRepository
                 .findByApplicationIdAndDocumentType(applicationId, documentType)
-                .orElseThrow(() -> new RuntimeException("Документ не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Документ не знайдено"));
+
         Path path = Paths.get(doc.getFilePath()).normalize();
         if (!Files.exists(path) || !Files.isRegularFile(path)) {
-            throw new RuntimeException("Файл на диску не знайдено");
+            throw AppException.notFound("Файл на диску не знайдено");
         }
         try {
             Resource resource = new UrlResource(path.toUri());
             if (!resource.exists() || !resource.isReadable()) {
-                throw new RuntimeException("Файл недоступний для читання");
+                throw AppException.serverError("Файл недоступний для читання");
             }
             MediaType ct = resolveDocumentMediaType(doc);
             String name = doc.getFileName() != null ? doc.getFileName()
                     : documentType.name().toLowerCase() + "." + extensionFor(doc.getFileType());
             return new ServedApplicationDocument(resource, ct, name);
         } catch (MalformedURLException e) {
-            throw new RuntimeException("Некоректний шлях до файлу", e);
+            throw AppException.serverError("Некоректний шлях до файлу", e);
         }
     }
 
     public static String contentDispositionAttachment(String filename) {
-        String enc = URLEncoder.encode(filename, StandardCharsets.UTF_8)
-                .replace("+", "%20");
+        String enc = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
         return "attachment; filename*=UTF-8''" + enc;
     }
 
     public static String contentDispositionInline(String filename) {
-        String enc = URLEncoder.encode(filename, StandardCharsets.UTF_8)
-                .replace("+", "%20");
+        String enc = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
         return "inline; filename*=UTF-8''" + enc;
     }
 
@@ -414,21 +361,18 @@ public class ApplicationService {
     }
 
     private static String extensionFor(String fileType) {
-        if (fileType != null && fileType.equalsIgnoreCase("DOCX")) {
-            return "docx";
-        }
+        if (fileType != null && fileType.equalsIgnoreCase("DOCX")) return "docx";
         return "pdf";
     }
 
+    // Від Max: повна логіка — лідер бачить свої заявки, учасник — заявки лідера своєї команди
     @Transactional(readOnly = true)
     public List<ApplicationDTO> getMyApplications(Long userId) {
-        // Якщо користувач — лідер, повертаємо його власні заявки
         if (teamRepository.findByLeader_Id(userId).isPresent()) {
             return appRepository.findByApplicantIdWithDetails(userId)
                     .stream().map(this::toDTO).toList();
         }
 
-        // Якщо учасник — повертаємо заявки лідера своєї команди
         return teamRepository.findAcceptedTeamsByUserId(userId)
                 .stream().findFirst()
                 .map(team -> appRepository
@@ -437,65 +381,41 @@ public class ApplicationService {
                 .orElse(List.of());
     }
 
-    // Одна заявка
     @Transactional
     public ApplicationDTO getById(Long id) {
         return toDTO(appRepository.findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException("Заявку не знайдено")
-                )
-        );
+                .orElseThrow(() -> AppException.notFound("Заявку не знайдено")));
     }
 
-    // Всі заявки (ADMIN)
     @Transactional
-    /**
-     * Перегляд заявки з перевіркою прав: студент — лише своя; комісія та адмін — будь-яка.
-     */
     public ApplicationDTO getByIdForViewer(Long id, User viewer) {
         Application app = appRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
         if (viewer == null || !canViewApplication(viewer, app)) {
-            throw new RuntimeException("Немає доступу");
+            throw AppException.forbidden("Немає доступу");
         }
         return toDTO(app);
     }
 
     private boolean canViewApplication(User viewer, Application app) {
-        if (viewer.hasRole(Role.ADMIN) || viewer.hasRole(Role.SUPER_ADMIN)) {
-            return true;
-        }
-        if (viewer.hasRole(Role.EVALUATOR) || viewer.hasRole(Role.SUPER_EVALUATOR)) {
-            return true;
-        }
-        if (viewer.hasRole(Role.MENTOR)) {
-            return true;
-        }
-        return viewer.hasRole(Role.STUDENT)
-                && app.getApplicant().getId().equals(viewer.getId());
+        if (viewer.hasRole(Role.ADMIN) || viewer.hasRole(Role.SUPER_ADMIN)) return true;
+        if (viewer.hasRole(Role.EVALUATOR) || viewer.hasRole(Role.SUPER_EVALUATOR)) return true;
+        if (viewer.hasRole(Role.MENTOR)) return true;
+        return viewer.hasRole(Role.STUDENT) && app.getApplicant().getId().equals(viewer.getId());
     }
 
-    // Тільки не-чернетки для адміна
     public List<ApplicationDTO> getAll() {
-        return appRepository.findAll()
-                .stream()
-                .filter(a ->
-                        a.getStatus() != ApplicationStatus.DRAFT
-                )
+        return appRepository.findAll().stream()
+                .filter(a -> a.getStatus() != ApplicationStatus.DRAFT)
                 .map(this::toDTO)
                 .toList();
     }
 
-    public ApplicationDTO changeStatus(
-            Long appId,
-            ApplicationStatus newStatus,
-            String comment,
-            User admin) {
+    public ApplicationDTO changeStatus(Long appId, ApplicationStatus newStatus,
+            String comment, User admin) {
 
         Application app = appRepository.findById(appId)
-                .orElseThrow(() ->
-                        new RuntimeException("Заявку не знайдено")
-                );
+                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
 
         ApplicationStatus old = app.getStatus();
         validateTransition(old, newStatus);
@@ -504,56 +424,58 @@ public class ApplicationService {
         app.setAdminComment(comment);
         Application saved = appRepository.save(app);
 
-        auditService.log(
-                admin,
-                "STATUS_CHANGED",
-                "APPLICATION",
-                appId,
+        auditService.log(admin, "STATUS_CHANGED", "APPLICATION", appId,
                 "Статус: " + old + " → " + newStatus
-                        + (comment != null
-                        ? ". Коментар: " + comment : "")
-        );
+                        + (comment != null ? ". Коментар: " + comment : ""));
 
-        emailService.sendApplicationStatusChanged(
-                app.getApplicant().getEmail(),
-                app.getApplicant().getName(),
-                newStatus.name(), comment
-        );
+        notificationService.notifyApplicationStatusChanged(
+                app.getApplicant(), newStatus.name(), comment, appId);
+
+        try {
+            if (newStatus == ApplicationStatus.ARCHIVED) {
+                emailService.sendProjectClosed(app.getApplicant().getEmail(),
+                        app.getApplicant().getName(), app.getCall().getTitle());
+            } else {
+                emailService.sendApplicationStatusChanged(app.getApplicant().getEmail(),
+                        app.getApplicant().getName(), newStatus.name(), comment);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to send status email for application {}: {}", appId, e.getMessage());
+        }
 
         return toDTO(saved);
     }
 
-    // set OWNER of the product
     @Transactional
     public ApplicationDTO setProductOwner(Long appId, Long userId, User currentUser) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> new RuntimeException("Application not found"));
-        if (app.getStatus() != ApplicationStatus.APPROVED) {
-            throw new RuntimeException("Product owner can only be set on approved applications");
+                .orElseThrow(() -> AppException.notFound("Application not found"));
+        if (app.getStatus() != ApplicationStatus.APPROVED
+                && app.getStatus() != ApplicationStatus.ONBOARDING
+                && app.getStatus() != ApplicationStatus.ACTIVE) {
+            throw AppException.badRequest(
+                    "Product owner can only be set on approved or active applications");
         }
-        // only program b
         if (app.getCall().getProgram().getType() != ProgramType.PROGRAM_B) {
-            throw new RuntimeException(" program owner can only be set on Program B applications");
+            throw AppException.badRequest(
+                    "Program owner can only be set on Program B applications");
         }
 
         User productOwner = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> AppException.notFound("User not found"));
 
         app.setProductOwner(productOwner);
         return toDTO(appRepository.save(app));
     }
 
     public List<ApplicationDTO> getByCall(Long callId) {
-        return appRepository.findByCallId(callId)
-                .stream()
-                .map(this::toDTO)
-                .toList();
+        return appRepository.findByCallId(callId).stream().map(this::toDTO).toList();
     }
 
     /** Лідер надсилає запит на завершення проекту */
     public ApplicationDTO completeProject(Long appId, Long userId, boolean isAdmin) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
 
         if (!isAdmin) {
             boolean isLeader = teamRepository.findByLeader_Id(userId)
@@ -586,7 +508,8 @@ public class ApplicationService {
         validateTransition(app.getStatus(), ApplicationStatus.COMPLETED);
         app.setStatus(ApplicationStatus.COMPLETED);
         Application saved = appRepository.save(app);
-        auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId, "Проект завершено адміном");
+        auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
+                "Проект завершено адміном");
         return toDTO(saved);
     }
 
@@ -739,10 +662,8 @@ public class ApplicationService {
     public ProjectHistoryDTO getMyProjects(Long userId) {
         Set<Long> allIds = new java.util.HashSet<>();
 
-        // Чи є userId зараз лідером якоїсь команди?
         boolean isCurrentLeader = teamRepository.findByLeader_Id(userId).isPresent();
 
-        // ID поточного лідера команди (якщо userId є учасником)
         Long myLeaderId = null;
         if (!isCurrentLeader) {
             myLeaderId = teamRepository.findAcceptedTeamsByUserId(userId)
@@ -752,12 +673,10 @@ public class ApplicationService {
         }
 
         if (isCurrentLeader) {
-            // Лідер: бачить всі свої заявки (APPROVED + COMPLETED)
             appRepository.findByApplicantId(userId)
                     .stream().map(Application::getId)
                     .forEach(allIds::add);
         } else if (myLeaderId != null) {
-            // Учасник: бачить тільки заявки свого ПОТОЧНОГО лідера де є у снапшоті
             Set<Long> snapshotIds = new java.util.HashSet<>(
                     applicationMemberRepository.findApplicationIdsByUserId(userId));
             appRepository.findByApplicantId(myLeaderId)
@@ -765,7 +684,6 @@ public class ApplicationService {
                     .filter(snapshotIds::contains)
                     .forEach(allIds::add);
         }
-        // Якщо користувач не лідер і не учасник жодної команди — показуємо порожньо
 
         List<Application> apps = appRepository.findAllById(allIds)
                 .stream()
@@ -810,36 +728,24 @@ public class ApplicationService {
         return new ProjectHistoryDTO(current, history);
     }
 
-    // Валідація переходу між статусами
-    private void validateTransition(
-            ApplicationStatus current,
-            ApplicationStatus next) {
-        List<ApplicationStatus> allowed =
-                ALLOWED.getOrDefault(current, List.of());
+    private void validateTransition(ApplicationStatus current, ApplicationStatus next) {
+        List<ApplicationStatus> allowed = ALLOWED.getOrDefault(current, List.of());
         if (!allowed.contains(next)) {
-            throw new RuntimeException(
-                    "Недозволений перехід: "
-                            + current + " → " + next
-            );
+            throw AppException.badRequest("Недозволений перехід: " + current + " → " + next);
         }
     }
 
-    private Application findAndCheckOwner(
-            Long appId, Long userId) {
+    private Application findAndCheckOwner(Long appId, Long userId) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() ->
-                        new RuntimeException("Заявку не знайдено")
-                );
+                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
         if (!app.getApplicant().getId().equals(userId)) {
-            throw new RuntimeException("Немає доступу");
+            throw AppException.forbidden("Немає доступу");
         }
         return app;
     }
 
-
     private ApplicationDTO toDTO(Application a) {
-        boolean isProgramB = a.getCall().getProgram().getType()
-                == ProgramType.PROGRAM_B;
+        boolean isProgramB = a.getCall().getProgram().getType() == ProgramType.PROGRAM_B;
         UUID organizationId = null;
         String organizationName = null;
 
@@ -857,7 +763,8 @@ public class ApplicationService {
         List<ApplicationDTO.MemberSnapshotDTO> teamMembers =
                 applicationMemberRepository.findByApplicationId(a.getId())
                         .stream()
-                        .map(m -> new ApplicationDTO.MemberSnapshotDTO(m.getUserId(), m.getEmail(), m.getRole()))
+                        .map(m -> new ApplicationDTO.MemberSnapshotDTO(
+                                m.getUserId(), m.getEmail(), m.getRole()))
                         .toList();
 
         return new ApplicationDTO(
@@ -880,13 +787,9 @@ public class ApplicationService {
         );
     }
 
-    private DocumentDTO toDocumentDTO(
-            ApplicationDocument d) {
+    private DocumentDTO toDocumentDTO(ApplicationDocument d) {
         String label = DocumentRequirements
-                .forProgram(
-                        d.getApplication().getCall()
-                                .getProgram().getType()
-                )
+                .forProgram(d.getApplication().getCall().getProgram().getType())
                 .stream()
                 .filter(r -> r.type() == d.getDocumentType())
                 .findFirst()
@@ -903,26 +806,19 @@ public class ApplicationService {
         );
     }
 
-    /** Заявку на виклик подає лідер команди (applicant_id = leader). */
     private void assertApplicantIsTeamLeader(User applicant) {
-        if (applicant.hasRole(Role.SUPER_ADMIN)) {
-            return;
-        }
+        if (applicant.hasRole(Role.SUPER_ADMIN)) return;
         if (!teamRepository.findByLeader_Id(applicant.getId()).isPresent()) {
-            throw new RuntimeException(
-                    "Подавати заявку на виклик може лише лідер команди");
+            throw AppException.badRequest("Подавати заявку на виклик може лише лідер команди");
         }
     }
 
-    /** Команда повністю укомплектована (кількість ACCEPTED == maxCapacity). */
     private void assertTeamIsFullyAssembled(User applicant) {
-        if (applicant.hasRole(Role.SUPER_ADMIN)) {
-            return;
-        }
+        if (applicant.hasRole(Role.SUPER_ADMIN)) return;
         teamRepository.findByLeader_Id(applicant.getId()).ifPresent(team -> {
             long accepted = teamMemberRepository.countAcceptedMembers(team.getId());
             if (accepted < team.getMaxCapacity()) {
-                throw new RuntimeException(
+                throw AppException.badRequest(
                         "Команда не укомплектована: потрібно " + team.getMaxCapacity()
                         + " учасник(ів), зараз " + accepted + ".");
             }

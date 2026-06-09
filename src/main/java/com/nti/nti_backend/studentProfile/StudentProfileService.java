@@ -1,5 +1,6 @@
 package com.nti.nti_backend.studentProfile;
 
+import com.nti.nti_backend.file.FileTypeValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -10,9 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 
 @Service
 @Transactional
@@ -25,15 +24,6 @@ public class StudentProfileService {
     private final String avatarUploadDir = "uploads/profile-photos/";
 
     private static final long MAX_AVATAR_BYTES = 10L * 1024 * 1024;
-
-    private static final List<String> DANGEROUS_SUFFIXES = List.of(
-            ".exe", ".bat", ".cmd", ".sh", ".dll", ".jar", ".php", ".html", ".htm"
-    );
-
-    private static final String[] IMAGE_SUFFIXES = {
-            ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff",
-            ".heic", ".heif", ".avif", ".ico", ".jfif", ".pjpeg", ".pjp", ".svg",
-    };
 
     public StudentProfileService(StudentProfileRepository studentProfileRepository) {
         this.studentProfileRepository = studentProfileRepository;
@@ -81,14 +71,8 @@ public class StudentProfileService {
             throw new IllegalStateException("Cannot upload an empty file");
         }
 
-        String contentType = file.getContentType();
         String originalFileName = file.getOriginalFilename();
-        boolean hasPdfExtension =
-                originalFileName != null && originalFileName.toLowerCase().endsWith(".pdf");
-        boolean hasPdfMime =
-                "application/pdf".equalsIgnoreCase(contentType)
-                        || "application/octet-stream".equalsIgnoreCase(contentType);
-        if (!hasPdfExtension || !hasPdfMime) {
+        if (!FileTypeValidator.isPdf(file)) {
             throw new IllegalStateException("Only PDF files are accepted for CV");
         }
 
@@ -136,13 +120,12 @@ public class StudentProfileService {
             throw new IllegalStateException("Photo must be at most 10 MB");
         }
 
-        String contentType = file.getContentType();
         String originalFileName = file.getOriginalFilename();
         if (originalFileName == null || originalFileName.isBlank()) {
             throw new IllegalStateException("File name is required");
         }
-        if (!isAllowedProfileImage(originalFileName, contentType)) {
-            throw new IllegalStateException("Дозволено лише зображення (типові формати фото)");
+        if (!FileTypeValidator.isAllowedImage(file)) {
+            throw new IllegalStateException("Дозволено лише зображення формату JPEG, PNG або WebP");
         }
 
         StudentProfile profile = getProfileById(userId);
@@ -198,23 +181,4 @@ public class StudentProfileService {
                 && profile.getCvFilePath() != null;
     }
 
-    private boolean isAllowedProfileImage(String filename, String contentType) {
-        if (filename == null || filename.isBlank()) {
-            return false;
-        }
-        String lower = filename.toLowerCase(Locale.ROOT);
-        for (String bad : DANGEROUS_SUFFIXES) {
-            if (lower.endsWith(bad)) {
-                return false;
-            }
-        }
-        String ct = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT).trim();
-        if (!ct.isEmpty() && !ct.startsWith("image/") && !"application/octet-stream".equals(ct)) {
-            return false;
-        }
-        if (ct.startsWith("image/")) {
-            return true;
-        }
-        return Arrays.stream(IMAGE_SUFFIXES).anyMatch(lower::endsWith);
-    }
 }

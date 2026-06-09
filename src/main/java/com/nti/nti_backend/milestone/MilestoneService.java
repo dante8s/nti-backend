@@ -8,6 +8,8 @@ import com.nti.nti_backend.milestone.entity.Milestone;
 import com.nti.nti_backend.milestone.entity.MilestoneAttachment;
 import com.nti.nti_backend.milestone.entity.MilestoneComment;
 import com.nti.nti_backend.milestone.entity.MilestoneStatus;
+import com.nti.nti_backend.notification.NotificationService;
+import com.nti.nti_backend.exception.AppException;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
 import com.nti.nti_backend.program.ProgramType;
@@ -38,10 +40,10 @@ import java.util.*;
 public class MilestoneService {
 
     private final MilestoneRepository milestoneRepository;
-    //private final MentorshipRepository mentorshipRepository;
     private final ApplicationRepository applicationRepository;
     private final MilestoneAttachmentRepository attachmentRepository;
     private final FileServeService fileServeService;
+    private final NotificationService notificationService;
 
     private static final int MAX_ATTACHMENTS = 10;
 
@@ -438,8 +440,16 @@ public class MilestoneService {
         }
 
         milestone.setStatus(newStatus);
+        MilestoneResponseDTO result = toResponseDTO(milestoneRepository.save(milestone));
 
-        return toResponseDTO(milestoneRepository.save(milestone));
+        notificationService.notifyMilestoneStatusChanged(
+                milestone.getCreatedBy(),
+                milestone.getTitle(),
+                newStatus.name(),
+                milestone.getId().toString()
+        );
+
+        return result;
     }
 
     private MilestoneCommentDTO toCommentDTO(MilestoneComment c) {
@@ -464,7 +474,7 @@ public class MilestoneService {
                     StandardCopyOption.REPLACE_EXISTING);
             return filePath.toString();
         } catch (IOException e) {
-            throw new RuntimeException("Failed to store attachment: " + e.getMessage());
+            throw AppException.serverError("Failed to store attachment: " + e.getMessage(), e);
         }
     }
 

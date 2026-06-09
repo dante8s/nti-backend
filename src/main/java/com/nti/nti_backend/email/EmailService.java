@@ -1,219 +1,195 @@
 package com.nti.nti_backend.email;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
+
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
 
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailService {
 
-    private final JavaMailSender mailSender;
+    private final JavaMailSender        mailSender;
+    private final EmailTemplateService  templateService;
+    private final TemplateEngine        templateEngine;
 
-    @Value("${app.backend-url}")
-    private String backendUrl;
+    @Value("${app.backend-url}")  private String backendUrl;
+    @Value("${app.frontend-url}") private String frontendUrl;
+    @Value("${app.mail.from}")    private String mailFrom;
+    @Value("${app.mail.admin}")   private String adminEmail;
 
-    @Value("${app.frontend-url}")
-    private String frontendUrl;
+    // ── Core send ─────────────────────────────────────────────────────────────
 
-    @Value("${app.mail.from}")
-    private String mailFrom;
+    @Async
+    public void send(String to, EmailTemplateType type, Map<String, String> vars) {
+        try {
+            String[] rendered = templateService.render(type, vars);
+            String subject = rendered[0];
+            String body    = rendered[1];
 
-    @Value("${app.mail.admin}")
-    private String adminEmail;
+            Context ctx = new Context();
+            ctx.setVariable("subject", subject);
+            ctx.setVariable("body", body);
+            String html = templateEngine.process("email/base", ctx);
 
-    // Базовий метод відправки
-    private void send(String to, String subject, String text) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(mailFrom);
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(text);
-        mailSender.send(message);
+            var message = mailSender.createMimeMessage();
+            var helper  = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(mailFrom);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+            mailSender.send(message);
+
+        } catch (Exception e) {
+            log.warn("Failed to send email [{}] to {}: {}", type, to, e.getMessage());
+        }
     }
 
-    // Підтвердження email після реєстрації
+    // ── Transactional emails ──────────────────────────────────────────────────
+
+    @Async
     public void sendVerificationEmail(String to, String token) {
-        String link = backendUrl + "/api/auth/verify?token=" + token;
-        send(
-                to,
-                "NTI — Підтвердіть вашу email адресу",
-                "Вітаємо у NTI!\n\n"
-                        + "Для підтвердження вашої email адреси перейдіть за посиланням:\n\n"
-                        + link + "\n\n"
-                        + "Посилання дійсне 24 години.\n\n"
-                        + "Якщо ви не реєструвались — проігноруйте цей лист."
-        );
+        send(to, EmailTemplateType.VERIFICATION, Map.of(
+                "link", backendUrl + "/api/auth/verify?token=" + token
+        ));
     }
 
-    // Скидання пароля
+    @Async
     public void sendResetPasswordEmail(String to, String token) {
-        String link = frontendUrl + "/reset-password?token=" + token;
-        send(
-                to,
-                "NTI — Скидання пароля",
-                "Ви запросили скидання пароля.\n\n"
-                        + "Перейдіть за посиланням щоб встановити новий пароль:\n\n"
-                        + link + "\n\n"
-                        + "Посилання дійсне 1 годину.\n\n"
-                        + "Якщо ви не запитували скидання — проігноруйте цей лист."
-        );
+        send(to, EmailTemplateType.RESET_PASSWORD, Map.of(
+                "link", frontendUrl + "/reset-password?token=" + token
+        ));
     }
 
-    // Вітальний лист після підтвердження email
+    @Async
     public void sendWelcomeEmail(String to, String name) {
-        send(
-                to,
-                "NTI — Ласкаво просимо!",
-                "Вітаємо, " + name + "!\n\n"
-                        + "Ваш акаунт успішно підтверджено.\n\n"
-                        + "Тепер заповніть ваш профіль щоб подати заявку на програму.\n\n"
-                        + frontendUrl + "/onboarding\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.WELCOME, Map.of(
+                "name", name,
+                "link", frontendUrl + "/onboarding"
+        ));
     }
 
-    // Нотифікація про зміну статусу заявки
-    public void sendApplicationStatusChanged(
-            String to,
-            String applicantName,
-            String newStatus,
-            String comment) {
-        send(
-                to,
-                "NTI — Статус вашої заявки змінено",
-                "Вітаємо, " + applicantName + "!\n\n"
-                        + "Статус вашої заявки змінено на: " + newStatus + "\n\n"
-                        + (comment != null && !comment.isBlank()
-                        ? "Коментар: " + comment + "\n\n"
-                        : "")
-                        + "Деталі у вашому кабінеті:\n"
-                        + frontendUrl + "/student/applications\n\n"
-                        + "Команда NTI"
-        );
+    @Async
+    public void sendApplicationStatusChanged(String to, String name,
+                                             String status, String comment) {
+        send(to, EmailTemplateType.APPLICATION_STATUS_CHANGED, Map.of(
+                "name",    name,
+                "status",  status,
+                "comment", comment != null ? "Коментар: " + comment : "",
+                "link",    frontendUrl + "/app/my-applications"
+        ));
     }
 
-    // Сповіщення адмінів про нового юзера
-    public void sendNewUserNotification(
-            String userName, String userEmail, String roles) {
-        send(
-                adminEmail,
-                "NTI — Новий користувач очікує схвалення",
-                "Новий користувач зареєструвався:\n\n"
-                        + "Ім'я: " + userName + "\n"
-                        + "Email: " + userEmail + "\n"
-                        + "Ролі: " + roles + "\n\n"
-                        + "Перейдіть до панелі адміна щоб схвалити:\n"
-                        + frontendUrl + "/admin/users"
-        );
+    @Async
+    public void sendNewUserNotification(String userName, String userEmail, String roles) {
+        send(adminEmail, EmailTemplateType.NEW_USER_NOTIFICATION, Map.of(
+                "name",  userName,
+                "email", userEmail,
+                "roles", roles,
+                "link",  frontendUrl + "/app/admin/users"
+        ));
     }
 
-    // Invite mentor
+    @Async
     public void sendMentorInvite(String to, String token) {
-        String link = frontendUrl + "/complete-registration?token=" + token;
-        send(
-                to,
-                "NTI — Запрошення стати ментором",
-                "Вітаємо!\n\n"
-                        + "Адміністратор NTI запросив вас стати ментором.\n\n"
-                        + "Для завершення реєстрації перейдіть за посиланням:\n\n"
-                        + link + "\n\n"
-                        + "Вам потрібно буде вказати ваше ім'я та пароль.\n"
-                        + "Ваша роль вже встановлена як Ментор.\n\n"
-                        + "Посилання дійсне 7 днів.\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.MENTOR_INVITE, Map.of(
+                "link", frontendUrl + "/complete-registration?token=" + token
+        ));
     }
 
+    @Async
     public void sendOrgMemberInvite(String to, String orgName, String token) {
-        String link = frontendUrl + "/complete-org-invite?token=" + token;
-        send(
-                to,
-                "NTI — Запрошення до організації " + orgName,
-                "Вітаємо!\n\n"
-                        + "Вас запросили приєднатися до організації «" + orgName + "» на платформі NTI.\n\n"
-                        + "Для завершення реєстрації перейдіть за посиланням:\n\n"
-                        + link + "\n\n"
-                        + "Вам потрібно буде вказати ваше ім'я та пароль.\n"
-                        + "Ваш email та членство в організації вже встановлені.\n\n"
-                        + "Посилання дійсне 7 днів.\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.ORG_MEMBER_INVITE, Map.of(
+                "orgName", orgName,
+                "link",    frontendUrl + "/complete-org-invite?token=" + token
+        ));
     }
 
-    // Схвалення акаунту
+    @Async
     public void sendAccountApproved(String to, String name) {
-        send(
-                to,
-                "NTI — Ваш акаунт схвалено!",
-                "Вітаємо, " + name + "!\n\n"
-                        + "Ваш акаунт схвалено адміністратором.\n\n"
-                        + "Тепер ви можете увійти в систему:\n"
-                        + frontendUrl + "/login\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.ACCOUNT_APPROVED, Map.of(
+                "name", name,
+                "link", frontendUrl + "/login"
+        ));
     }
 
-    // Відхилення акаунту
+    @Async
     public void sendAccountRejected(String to, String name, String reason) {
-        send(
-                to,
-                "NTI — Акаунт не схвалено",
-                "Вітаємо, " + name + "!\n\n"
-                        + "На жаль, ваш акаунт не схвалено.\n\n"
-                        + "Причина: " + reason + "\n\n"
-                        + "Якщо маєте питання — зверніться до нас:\n"
-                        + mailFrom + "\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.ACCOUNT_REJECTED, Map.of(
+                "name",         name,
+                "reason",       reason,
+                "supportEmail", mailFrom
+        ));
     }
 
-    // Відхилення запиту на завершення проекту (тільки лідеру)
     @Async
     public void sendCompletionRejected(String to, String leaderName, String projectName) {
-        send(
-                to,
-                "NTI — Запит на завершення проекту відхилено",
-                "Вітаємо, " + leaderName + "!\n\n"
-                        + "Адміністратор відхилив ваш запит на завершення проекту «" + projectName + "».\n\n"
-                        + "Проект залишається активним. Якщо у вас є питання — зверніться до адміністратора.\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.COMPLETION_REJECTED, Map.of(
+                "name",        leaderName,
+                "projectName", projectName
+        ));
     }
-    // Запрошення незареєстрованого користувача до команди
+
     @Async
     public void sendTeamInviteToUnregistered(String to, String teamName, String token) {
-        String link = frontendUrl + "/complete-team-invite?token=" + token;
-        send(
-                to,
-                "NTI — Запрошення до команди «" + teamName + "»",
-                "Вітаємо!\n\n"
-                        + "Вас запрошують до команди «" + teamName + "» на платформі NTI.\n\n"
-                        + "Для того щоб прийняти участь, перейдіть за посиланням:\n\n"
-                        + link + "\n\n"
-                        + "Вам потрібно буде вказати ваше ім'я та пароль.\n"
-                        + "Після реєстрації ви зможете прийняти або відхилити запрошення в особистому кабінеті.\n\n"
-                        + "Посилання дійсне 7 днів.\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.TEAM_INVITE_UNREGISTERED, Map.of(
+                "teamName", teamName,
+                "link",     frontendUrl + "/complete-team-invite?token=" + token
+        ));
     }
 
     // Блокування акаунту
+    @Async
     public void sendAccountSuspended(String to, String name, String reason) {
-        send(
-                to,
-                "NTI — Акаунт заблоковано",
-                "Вітаємо, " + name + "!\n\n"
-                        + "Ваш акаунт було заблоковано.\n\n"
-                        + "Причина: " + reason + "\n\n"
-                        + "Якщо маєте питання — зверніться до нас:\n"
-                        + mailFrom + "\n\n"
-                        + "Команда NTI"
-        );
+        send(to, EmailTemplateType.ACCOUNT_SUSPENDED, Map.of(
+                "name",         name,
+                "reason",       reason,
+                "supportEmail", mailFrom
+        ));
+    }
+
+    @Async
+    public void sendMentorAssigned(String to, String name, String mentorName, Long applicationId) {
+        send(to, EmailTemplateType.MENTOR_ASSIGNED, Map.of(
+                "name",       name,
+                "mentorName", mentorName,
+                "link",       frontendUrl + "/app/applications/" + applicationId
+        ));
+    }
+
+    @Async
+    public void sendDeadlineReminder(String to, String name, String callTitle,
+                                     String daysLeft, Long applicationId) {
+        send(to, EmailTemplateType.DEADLINE_REMINDER, Map.of(
+                "name",      name,
+                "callTitle", callTitle,
+                "daysLeft",  daysLeft,
+                "link",      frontendUrl + "/app/applications/" + applicationId
+        ));
+    }
+
+    @Async
+    public void sendProjectClosed(String to, String name, String projectTitle) {
+        send(to, EmailTemplateType.PROJECT_CLOSED, Map.of(
+                "name",         name,
+                "projectTitle", projectTitle
+        ));
+    }
+
+    @Async
+    public void sendBulkMessage(String to, String subject, String body) {
+        send(to, EmailTemplateType.BULK_MESSAGE, Map.of(
+                "subject", subject,
+                "body",    body
+        ));
     }
 }
