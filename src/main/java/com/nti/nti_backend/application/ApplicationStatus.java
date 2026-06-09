@@ -8,5 +8,6 @@ public enum ApplicationStatus {
     APPROVED,
     REJECTED,
     COMPLETION_REQUESTED,
+    COMPLETION_PO_APPROVED,
     COMPLETED
 }
