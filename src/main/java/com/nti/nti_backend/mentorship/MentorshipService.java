@@ -149,14 +149,22 @@ public class MentorshipService {
 
         User currentUser = getCurrentUser();
         boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
-        boolean isMentor = mentorship.getMentor().getId().equals(currentUser.getId());
+        boolean isAssignedMentor = mentorship.getMentor().getId()
+                .equals(currentUser.getId());
         boolean isStudentOfApplication = mentorship.getApplication() != null
                 && currentUser.hasRole(Role.STUDENT)
                 && mentorship.getApplication().getApplicant().getId()
                 .equals(currentUser.getId());
 
-        if (!isAdminOrSuper && !isMentor && !isStudentOfApplication) {
-            throw new ConflictException("You do not have access to this mentorship");
+        boolean isTeamMember = mentorship.getApplication() != null
+                && currentUser.hasRole(Role.STUDENT)
+                && mentorship.getApplication().getTeamSnapshot() != null
+                && mentorship.getApplication().getTeamSnapshot().stream()
+                .anyMatch(member -> member.getUserId() != null && member.getUserId().equals(currentUser.getId()));
+
+        if (!isAdminOrSuper && !isAssignedMentor && !isStudentOfApplication && !isTeamMember) {
+            throw new ConflictException(
+                    "You do not have access to these notes");
         }
 
         return toResponseDTO(mentorship);
@@ -265,25 +273,37 @@ public class MentorshipService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Mentorship not found: " + mentorshipId
                 ));
+
         User currentUser = getCurrentUser();
         boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
-        boolean isAssignedMentor = mentorship.getMentor().getId()
-                .equals(currentUser.getId());
-        boolean isStudentOfApplication = mentorship.getApplication() != null
-                && currentUser.hasRole(Role.STUDENT)
-                && mentorship.getApplication().getApplicant().getId()
-                .equals(currentUser.getId());
+        boolean isAssignedMentor = mentorship.getMentor().getId().equals(currentUser.getId());
 
-        if (!isAdminOrSuper && !isAssignedMentor && !isStudentOfApplication) {
-            throw new ConflictException(
-                    "You do not have access to these notes");
+        Long appId = (mentorship.getApplication() != null) ? mentorship.getApplication().getId() : null;
+
+        boolean isAuthorizedStudent = false;
+        if (appId != null && currentUser.hasRole(Role.STUDENT)) {
+            Application app = applicationRepository.findById(appId).orElse(null);
+
+            if (app != null) {
+                boolean isApplicant = app.getApplicant() != null && app.getApplicant().getId().equals(currentUser.getId());
+
+                boolean isTeamMember = app.getTeamSnapshot() != null && app.getTeamSnapshot().stream()
+                        .anyMatch(member -> member.getUserId() != null && member.getUserId().equals(currentUser.getId()));
+
+                isAuthorizedStudent = isApplicant || isTeamMember;
+            }
+        }
+
+        if (!isAdminOrSuper && !isAssignedMentor && !isAuthorizedStudent) {
+            throw new ConflictException("You do not have access to these notes");
         }
 
         return consultationRepository
                 .findAllByMentorshipIdOrderByConsultationDateDesc(mentorshipId)
-                .stream().map(this::toConsultationDTO).collect(Collectors.toList());
+                .stream()
+                .map(this::toConsultationDTO)
+                .collect(Collectors.toList());
     }
-
     @Transactional
     public ConsultationResponseDTO updateConsultation(UUID id, ConsultationRequestDTO dto) {
         User currentUser = getCurrentUser();
