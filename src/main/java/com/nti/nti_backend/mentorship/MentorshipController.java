@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.security.access.prepost.PreAuthorize;
+
 
 @RestController
 @RequestMapping("/api")
@@ -28,6 +30,7 @@ public class MentorshipController {
     }
 
     // GET /api/mentorships/my
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN')")
     @GetMapping("/mentorships/my")
     public ResponseEntity<List<MentorshipResponseDTO>> getMyMentorships(
             @AuthenticationPrincipal User user

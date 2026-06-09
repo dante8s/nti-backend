@@ -117,6 +117,17 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-cache</artifactId>
 		</dependency>
+		<!--		thymeleaf for email templates-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-thymeleaf</artifactId>
+		</dependency>
+		<!--		rate limiting-->
+		<dependency>
+		<groupId>com.bucket4j</groupId>
+		<artifactId>bucket4j-core</artifactId>
+		<version>8.10.1</version>
+		</dependency>
 	</dependencies>
 
 	<build>

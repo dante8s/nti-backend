@@ -29,6 +29,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import static com.nti.nti_backend.config.CacheNames.*;
 import org.springframework.cache.annotation.*;
+import com.nti.nti_backend.exception.AppException;
 
 @Service
 @RequiredArgsConstructor
@@ -50,28 +51,39 @@ public class ApplicationService {
     private final EmailService emailService;
     private final AuditService auditService;
     private final OrgMemberRepository memberRepository;
+    private final ApplicationMemberRepository applicationMemberRepository;
+    private final NotificationService notificationService;
+    private final OrgMemberRepository memberRepository;
 
-    private static final Map<ApplicationStatus,
-            List<ApplicationStatus>> ALLOWED = Map.of(
-            ApplicationStatus.DRAFT,
-            List.of(ApplicationStatus.SUBMITTED),
-            ApplicationStatus.SUBMITTED,
-            List.of(ApplicationStatus.IN_REVIEW),
-            ApplicationStatus.IN_REVIEW,
-            List.of(
-                    ApplicationStatus.APPROVED,
-                    ApplicationStatus.REJECTED,
-                    ApplicationStatus.NEEDS_REVISION
-            ),
-            ApplicationStatus.NEEDS_REVISION,
-            List.of(ApplicationStatus.SUBMITTED)
+
+    // Від main: повніша state machine з усіма статусами
+    private static final Map<ApplicationStatus, List<ApplicationStatus>> ALLOWED = Map.ofEntries(
+            Map.entry(ApplicationStatus.DRAFT,
+                    List.of(ApplicationStatus.SUBMITTED)),
+            Map.entry(ApplicationStatus.SUBMITTED,
+                    List.of(ApplicationStatus.FORMALLY_VERIFIED)),
+            Map.entry(ApplicationStatus.FORMALLY_VERIFIED,
+                    List.of(ApplicationStatus.IN_REVIEW)),
+            Map.entry(ApplicationStatus.IN_REVIEW,
+                    List.of(ApplicationStatus.APPROVED, ApplicationStatus.REJECTED,
+                            ApplicationStatus.NEEDS_REVISION)),
+            Map.entry(ApplicationStatus.NEEDS_REVISION,
+                    List.of(ApplicationStatus.SUBMITTED)),
+            Map.entry(ApplicationStatus.APPROVED,
+                    List.of(ApplicationStatus.ONBOARDING, ApplicationStatus.COMPLETION_REQUESTED)),
+            Map.entry(ApplicationStatus.ONBOARDING,
+                    List.of(ApplicationStatus.ACTIVE)),
+            Map.entry(ApplicationStatus.ACTIVE,
+                    List.of(ApplicationStatus.SUSPENDED, ApplicationStatus.ARCHIVED)),
+            Map.entry(ApplicationStatus.SUSPENDED,
+                    List.of(ApplicationStatus.ACTIVE, ApplicationStatus.ARCHIVED)),
+            Map.entry(ApplicationStatus.COMPLETION_REQUESTED,
+                    List.of(ApplicationStatus.COMPLETED, ApplicationStatus.APPROVED))
     );
 
     // Створити draft
     @CacheEvict(value = APPLICATIONS_MY, key = "#applicant.id")
-    public ApplicationDTO createDraft(
-            User applicant,
-            CreateApplicationRequest request) {
+    public ApplicationDTO createDraft(User applicant, CreateApplicationRequest request) {
 
         // Якщо заявка вже є — повертаємо її
         // замість помилки
@@ -155,6 +167,7 @@ public class ApplicationService {
             @CacheEvict(value = APPLICATIONS_MY, key = "#userId"),
             @CacheEvict(value = APPLICATIONS_ALL, allEntries = true)
     })
+    @Transactional
     public ApplicationDTO submit(
             Long appId, Long userId) {
 
@@ -362,13 +375,18 @@ public class ApplicationService {
 
     @Cacheable(value = APPLICATIONS_MY, key = "#userId")
     @Transactional(readOnly = true)
-    public List<ApplicationDTO> getMyApplications(
-            Long userId) {
-        return appRepository
-                .findByApplicantIdWithDetails(userId)
-                .stream()
-                .map(this::toDTO)
-                .collect(Collectors.toCollection(ArrayList::new));
+    public List<ApplicationDTO> getMyApplications(Long userId) {
+        if (teamRepository.findByLeader_Id(userId).isPresent()) {
+            return appRepository.findByApplicantIdWithDetails(userId)
+                    .stream().map(this::toDTO).collect(Collectors.toCollection(ArrayList::new));
+        }
+
+        return teamRepository.findAcceptedTeamsByUserId(userId)
+                .stream().findFirst()
+                .map(team -> appRepository
+                        .findByApplicantIdWithDetails(team.getLeader().getId())
+                        .stream().map(this::toDTO).collect(Collectors.toCollection(ArrayList::new)))
+                .orElseGet(ArrayList::new);
     }
 
     // Одна заявка

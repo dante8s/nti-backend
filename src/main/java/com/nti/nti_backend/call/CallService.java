@@ -2,6 +2,7 @@ package com.nti.nti_backend.call;
 
 import com.nti.nti_backend.program.Program;
 import com.nti.nti_backend.program.ProgramRepository;
+import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -58,7 +59,8 @@ public class CallService {
     })
     public CallDTO create(
             Long programId,
-            CreateCallRequest request) {
+            CreateCallRequest request,
+            User actor) {
         Program program = programRepository
                 .findById(programId)
                 .orElseThrow(() ->
@@ -78,7 +80,7 @@ public class CallService {
             @CacheEvict(value = CALLS_OPEN, allEntries = true),
             @CacheEvict(value = CALL, key = "#id")
     })
-    public void close(Long id) {
+    public void close(Long id, User actor) {
         Call call = callRepository.findById(id)
                 .orElseThrow(() ->
                         new RuntimeException("Виклик не знайдено")

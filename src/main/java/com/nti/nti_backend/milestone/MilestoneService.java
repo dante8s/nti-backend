@@ -42,6 +42,8 @@ import java.util.stream.Collectors;
 
 import static com.nti.nti_backend.config.CacheNames.*;
 import org.springframework.cache.annotation.*;
+import com.nti.nti_backend.notification.NotificationService;
+import com.nti.nti_backend.exception.AppException;
 @Service
 @RequiredArgsConstructor
 public class MilestoneService {
@@ -545,7 +547,16 @@ public class MilestoneService {
             milestone.setCompletedAt(OffsetDateTime.now());
         }
         milestone.setStatus(newStatus);
-        return toResponseDTO(milestoneRepository.save(milestone));
+        MilestoneResponseDTO result = toResponseDTO(milestoneRepository.save(milestone));
+
+        notificationService.notifyMilestoneStatusChanged(
+                milestone.getCreatedBy(),
+                milestone.getTitle(),
+                newStatus.name(),
+                milestone.getId().toString()
+        );
+
+        return result;
 
     }
 

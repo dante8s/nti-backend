@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import com.nti.nti_backend.audit.AuditService;
+import lombok.extern.slf4j.Slf4j;
+
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +35,8 @@ public class AuthService {
     private final RecaptchaService recaptchaService;
     private final CacheManager cacheManager;
     private final OrgMemberRepository memberRepository;
+    private final AuditService auditService;
+
 
 
     // Ролі які можна вибрати при реєстрації
@@ -246,7 +251,7 @@ public class AuthService {
             }
         });
 
-        return "Реєстрацію завершено. Ви можете увійти в систему.";
+        return "Реєстрацію завершено. Ви можете увійти в систему та прийняти запрошення до команди.";
     }
 
 
@@ -314,6 +319,9 @@ public class AuthService {
             if (c != null) c.clear();
         }
 
+        auditService.log(actor, "USER_ROLE_ADDED", "USER", userId,
+                "Роль " + role.name() + " додано для: " + user.getEmail());
+
     }
 
     public void removeRole(Long userId, Role role) {
@@ -338,6 +346,8 @@ public class AuthService {
             Cache orgsPublic = cacheManager.getCache(CacheNames.ORGANIZATIONS_PUBLIC);
             if (orgsPublic != null) orgsPublic.clear();
         }
+        auditService.log(actor, "USER_ROLE_REMOVED", "USER", userId,
+                "Роль " + role.name() + " видалено для: " + user.getEmail());
     }
 
     // -----------------------------------------------
