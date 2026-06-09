@@ -63,7 +63,6 @@ public class ApplicationService {
     private final OrgMemberRepository memberRepository;
     private final ApplicationMemberRepository applicationMemberRepository;
     private final NotificationService notificationService;
-    private final OrgMemberRepository memberRepository;
 
 
     // Від main: повніша state machine з усіма статусами
@@ -157,7 +156,7 @@ public class ApplicationService {
 
     // Відправити заявку
     @Caching(evict = {
-            @CacheEvict(value = APPLICATIONS_MY, key = "#userId"),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
             @CacheEvict(value = APPLICATIONS_ALL, allEntries = true)
     })
     @Transactional
@@ -430,7 +429,8 @@ public class ApplicationService {
 
     @Caching(evict = {
             @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
-            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
     })
     public ApplicationDTO changeStatus(
             Long appId,
@@ -505,10 +505,15 @@ public class ApplicationService {
 
     @Cacheable(value = APPLICATIONS_CALL, key = "#callId")
     public List<ApplicationDTO> getByCall(Long callId) {
-        return appRepository.findByCallId(callId).stream().map(this::toDTO).collect(Collectors.toList(ArrayList::new));
+        return appRepository.findByCallId(callId).stream().map(this::toDTO).collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** Лідер надсилає запит на завершення проекту */
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
+    })
     public ApplicationDTO completeProject(Long appId, Long userId, boolean isAdmin) {
         Application app = appRepository.findById(appId)
                 .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
@@ -538,6 +543,11 @@ public class ApplicationService {
     }
 
     /** Адмін підтверджує завершення */
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
+    })
     public ApplicationDTO approveCompletion(Long appId) {
         Application app = appRepository.findById(appId)
                 .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
@@ -553,6 +563,11 @@ public class ApplicationService {
     }
 
     /** Адмін відхиляє запит на завершення — повертає APPROVED, повідомляє лідера */
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
+    })
     public ApplicationDTO rejectCompletion(Long appId) {
         Application app = appRepository.findById(appId)
                 .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
@@ -692,7 +707,7 @@ public class ApplicationService {
                         .stream()
                         .map(m -> new ApplicationDTO.MemberSnapshotDTO(
                                 m.getUserId(), m.getEmail(), m.getRole()))
-                        .toList();
+                        .collect(Collectors.toCollection(ArrayList::new));
 
         return new ApplicationDTO(
                 a.getId(),

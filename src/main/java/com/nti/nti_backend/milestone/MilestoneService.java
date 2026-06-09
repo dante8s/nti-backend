@@ -59,10 +59,9 @@ public class MilestoneService {
     private final FileServeService fileServeService;
     private final NotificationService notificationService;
 
+
     private static final int MAX_ATTACHMENTS = 10;
 
-    @Value("${app.upload-dir:uploads}")
-    private String uploadDir;
 
     private static final Map<MilestoneStatus, Set<MilestoneStatus>> ALLOWED_TRANSITIONS =
             new EnumMap<>(MilestoneStatus.class);
@@ -371,42 +370,25 @@ public class MilestoneService {
                     "Milestone not found: " + milestoneId
             ));
 
-    boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
-    boolean isTeamLeader = milestone.getApplication() != null
-            && milestone.getApplication().getApplicant().getId()
-            .equals(currentUser.getId());
-    boolean isAssignedMentor = currentUser.hasRole(Role.MENTOR)
-            && milestone.getApplication() != null
-            && mentorshipRepository.existsByMentorIdAndApplication_IdAndStatus(
-                    currentUser.getId(),
-            milestone.getApplication().getId(),
-            MentorshipStatus.ACTIVE
-    );
+        validateMilestoneAccess(milestone, currentUser);
 
-    if (!isAdminOrSuper && !isTeamLeader && !isAssignedMentor) {
-        throw new ConflictException(
-                "Only the team leader, assigned mentor, or ADMIN can add attachments to this milestone"
-        );
-    }
+        try {
+            // Fix: Create unique name and route directly through FileServeService to enforce clean slashes and sanitization
+            String uniqueFilename = "milestone_" + milestoneId + "_" + System.currentTimeMillis() + "_" + file.getOriginalFilename();
+            String cleanRelativePath = fileServeService.saveImage(file, "milestones", uniqueFilename);
 
-    long currentCount = attachmentRepository.countByMilestoneId(milestoneId);
-    if (currentCount >= MAX_ATTACHMENTS) {
-        throw new ConflictException(
-                "Milestone already has the maximum of " + MAX_ATTACHMENTS + " attachments"
-        );
-    }
+            MilestoneAttachment attachment = MilestoneAttachment.builder()
+                    .milestone(milestone)
+                    .fileName(file.getOriginalFilename())
+                    .filePath(cleanRelativePath)
+                    .uploadedBy(currentUser)
+                    .build();
 
-    String path = saveAttachmentFile(file, milestoneId);
-
-    MilestoneAttachment attachment = MilestoneAttachment.builder()
-            .milestone(milestone)
-            .fileName(file.getOriginalFilename())
-            .filePath(path)
-            .uploadedBy(currentUser)
-            .build();
-
-    MilestoneAttachment saved = attachmentRepository.save(attachment);
-    return toAttachmentDTO(saved);
+            MilestoneAttachment saved = attachmentRepository.save(attachment);
+            return toAttachmentDTO(saved);
+        } catch (IOException e) {
+            throw new ConflictException("Failed to store attachment on the file system: " + e.getMessage());
+        }
     }
 
     @Transactional(readOnly = true)
@@ -438,6 +420,7 @@ public class MilestoneService {
         }
 
         attachmentRepository.delete(attachment);
+        fileServeService.deleteFile(attachment.getFilePath());
     }
 
     public ResponseEntity<Resource> serveAttachment(
@@ -452,16 +435,7 @@ public class MilestoneService {
             );
         }
 
-        boolean hasAccess = currentUser.hasRole(Role.ADMIN)
-                || currentUser.hasRole(Role.STUDENT)
-                || currentUser.hasRole(Role.MENTOR)
-                || currentUser.hasRole(Role.FIRM);
-
-        if (!hasAccess) {
-            throw new ConflictException(
-                    "You do not have access to this attachment"
-            );
-        }
+        validateMilestoneAccess(attachment.getMilestone(), currentUser);
 
         Resource resource = fileServeService.load(attachment.getFilePath());
         String contentType = fileServeService.detectContentType(attachment.getFileName());
@@ -473,6 +447,7 @@ public class MilestoneService {
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
                 .contentType(MediaType.parseMediaType(contentType))
                 .body(resource);
+
     }
 
     //  GET pending approval
@@ -574,21 +549,6 @@ public class MilestoneService {
                 .build();
     }
 
-    private String saveAttachmentFile(MultipartFile file, UUID milestoneId) {
-        try {
-            String filename = "milestone_" + milestoneId + "_"
-                    + System.currentTimeMillis() + "_"
-                    + file.getOriginalFilename();
-            Path uploadPath = Paths.get(uploadDir, "milestones");
-            Files.createDirectories(uploadPath);
-            Path filePath = uploadPath.resolve(filename);
-            Files.copy(file.getInputStream(), filePath,
-                    StandardCopyOption.REPLACE_EXISTING);
-            return filePath.toString();
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to store attachment: " + e.getMessage());
-        }
-    }
 
     private MilestoneAttachmentDTO toAttachmentDTO(MilestoneAttachment a) {
         return MilestoneAttachmentDTO.builder()
@@ -599,5 +559,25 @@ public class MilestoneService {
                 .uploadedByName(a.getUploadedBy().getName())
                 .uploadedAt(a.getUploadedAt())
                 .build();
+    }
+
+    private void validateMilestoneAccess(Milestone milestone, User currentUser) {
+        boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
+        boolean isTeamLeader = milestone.getApplication() != null
+                && milestone.getApplication().getApplicant().getId()
+                .equals(currentUser.getId());
+        boolean isAssignedMentor = currentUser.hasRole(Role.MENTOR)
+                && milestone.getApplication() != null
+                && mentorshipRepository.existsByMentorIdAndApplication_IdAndStatus(
+                currentUser.getId(),
+                milestone.getApplication().getId(),
+                MentorshipStatus.ACTIVE
+        );
+
+        if (!isAdminOrSuper && !isTeamLeader && !isAssignedMentor) {
+            throw new ConflictException(
+                    "You do not have authorization to access files connected to this milestone."
+            );
+        }
     }
 }

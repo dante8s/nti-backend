@@ -142,10 +142,10 @@ public class TeamController {
                         .or(() -> userRepository.findByEmail(email.trim()));
                 if (existing.isEmpty()) {
                     TeamMember member = teamService.inviteUnregisteredByEmail(teamId, email.trim());
-                    return ResponseEntity.ok(toMemberResponse(member));
+                    return ResponseEntity.ok(teamService.toMemberResponse(member));
                 }
                 TeamMember member = teamService.inviteMember(teamId, existing.get().getId());
-                return ResponseEntity.ok(toMemberResponse(member));
+                return ResponseEntity.ok(teamService.toMemberResponse(member));
             }
 
             Long targetUserId = resolveInviteTargetUserId(userId, email);

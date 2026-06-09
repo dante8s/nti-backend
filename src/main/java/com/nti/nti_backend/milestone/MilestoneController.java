@@ -62,6 +62,7 @@ public class MilestoneController {
 
     // DELETE /api/milestones/{id}
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Void> deleteMilestone(@PathVariable UUID id) {
         milestoneService.deleteMilestone(id);
         return ResponseEntity.noContent().build();

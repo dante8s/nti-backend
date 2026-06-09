@@ -189,7 +189,7 @@ public class TeamService {
         invite.setInvitedAt(LocalDateTime.now());
         TeamMember saved = teamMemberRepository.save(invite);
 
-        emailService.sendTeamInviteToUnregistered(email, team.getName(), inviteToken);
+        //emailService.sendTeamInviteToUnregistered(email, team.getName(), inviteToken);
 
         return saved;
     }
@@ -201,7 +201,8 @@ public class TeamService {
             @CacheEvict(value = TEAM_FOR_USER, key = "#userId"),
             @CacheEvict(value = TEAM_INVITES, key = "#userId"),
             @CacheEvict(value = ELIGIBLE_TEAMS, allEntries = true),
-            @CacheEvict(value = TEAM_FOR_USER, allEntries = true)
+            @CacheEvict(value = TEAM_FOR_USER, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
     })
     public TeamMember respondToInvitation(Long teamId, Long userId, boolean accepted) {
         TeamMember membership = teamMemberRepository.findByTeam_IdAndUser_Id(teamId, userId)
@@ -260,7 +261,8 @@ public class TeamService {
             @CacheEvict(value = TEAM_FOR_USER, key = "#memberUserId"),
             @CacheEvict(value = TEAM_INVITES, key = "#memberUserId"),
             @CacheEvict(value = ELIGIBLE_TEAMS, allEntries = true),
-            @CacheEvict(value = TEAM_FOR_USER, allEntries = true)
+            @CacheEvict(value = TEAM_FOR_USER, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
     })
     public void removeMember(Long teamId , Long memberUserId , Long requesterUserId , boolean admin) {
         Team team = teamRepository.findById(teamId)
@@ -322,7 +324,8 @@ public class TeamService {
     @Caching(evict = {
             @CacheEvict(value = TEAM, key = "#teamId"),
             @CacheEvict(value = TEAM_FOR_USER, allEntries = true),
-            @CacheEvict(value = ELIGIBLE_TEAMS, allEntries = true)
+            @CacheEvict(value = ELIGIBLE_TEAMS, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
     })
     public void deleteTeam(Long teamId, Long requesterUserId, boolean admin) {
         Team team = teamRepository.findByIdWithMembers(teamId)
