@@ -14,5 +14,9 @@ public enum DocumentType {
     RESUME_B,           // Резюме
     MOTIVATION,         // Мотивація
     SOLUTION_PROPOSAL,  // Пропозиція рішення
-    IMPLEMENTATION      // Впровадження
+    IMPLEMENTATION,     // Впровадження
+
+    // Результати проекту (обидві програми)
+    RESULT_1,           // Результатний документ 1
+    RESULT_2            // Результатний документ 2
 }
