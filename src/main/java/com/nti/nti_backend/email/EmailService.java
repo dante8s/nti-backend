@@ -131,23 +131,19 @@ public class EmailService {
         ));
     }
 
-    // Відхилення запиту на завершення проекту (тільки лідеру)
     @Async
     public void sendCompletionRejected(String to, String leaderName, String projectName) {
-        send(to, EmailTemplateType.ACCOUNT_REJECTED, Map.of(
-                "name",         "name",
-                "reason",       "reason",
-                "supportEmail", mailFrom
+        send(to, EmailTemplateType.COMPLETION_REJECTED, Map.of(
+                "name",        leaderName,
+                "projectName", projectName
         ));
     }
-    // Запрошення незареєстрованого користувача до команди
+
     @Async
     public void sendTeamInviteToUnregistered(String to, String teamName, String token) {
-        String link = frontendUrl + "/complete-team-invite?token=" + token;
-        send(to, EmailTemplateType.ACCOUNT_REJECTED, Map.of(
-                "name",         "name",
-                "reason",       "reason",
-                "supportEmail", mailFrom
+        send(to, EmailTemplateType.TEAM_INVITE_UNREGISTERED, Map.of(
+                "teamName", teamName,
+                "link",     frontendUrl + "/complete-team-invite?token=" + token
         ));
     }
 
