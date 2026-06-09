@@ -1,5 +1,6 @@
 package com.nti.nti_backend.program;
 
+import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,7 @@ import java.util.UUID;
 public class ProgramController {
 
     private final ProgramService programService;
+    private final AuditService auditService;
 
     // Program A
     @GetMapping("/api/public/programs-a")
@@ -46,10 +48,12 @@ public class ProgramController {
     @PostMapping("/api/admin/programs")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ProgramDTO> create(
-            @RequestBody ProgramDTO dto) {
-        return ResponseEntity.ok(
-                programService.create(dto)
-        );
+            @RequestBody ProgramDTO dto,
+            @AuthenticationPrincipal User actor) {
+        ProgramDTO result = programService.create(dto);
+        auditService.log(actor, "PROGRAM_CREATED", "PROGRAM", result.id(),
+                "Створено програму: \"" + dto.name() + "\"");
+        return ResponseEntity.ok(result);
     }
 
     // FIRM submits Program B project
@@ -111,16 +115,21 @@ public class ProgramController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ProgramDTO> review(
             @PathVariable Long id,
-            @RequestBody ReviewProgramRequest dto
-    ) {
-        return ResponseEntity.ok(programService.review(id, dto));
+            @RequestBody ReviewProgramRequest dto,
+            @AuthenticationPrincipal User actor) {
+        ProgramDTO result = programService.review(id, dto);
+        auditService.log(actor, "PROGRAM_REVIEWED", "PROGRAM", id,
+                "Рішення по програмі: " + dto.status());
+        return ResponseEntity.ok(result);
     }
 
     @DeleteMapping("/api/admin/programs/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deactivate(
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            @AuthenticationPrincipal User actor) {
         programService.deactivate(id);
+        auditService.log(actor, "PROGRAM_DEACTIVATED", "PROGRAM", id, "Програму деактивовано");
         return ResponseEntity.noContent().build();
     }
 

@@ -13,6 +13,8 @@ import com.nti.nti_backend.milestone.entity.MilestoneComment;
 import com.nti.nti_backend.milestone.entity.MilestoneStatus;
 import com.nti.nti_backend.organization.entity.OrgMemberRole;
 import com.nti.nti_backend.organization.entity.Organization;
+import com.nti.nti_backend.notification.NotificationService;
+import com.nti.nti_backend.exception.AppException;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
 import com.nti.nti_backend.organization.repository.OrgMemberRepository;
@@ -55,6 +57,7 @@ public class MilestoneService {
     private final MentorshipRepository mentorshipRepository;
     private final MilestoneAttachmentRepository attachmentRepository;
     private final FileServeService fileServeService;
+    private final NotificationService notificationService;
 
     private static final int MAX_ATTACHMENTS = 10;
 
@@ -546,6 +549,7 @@ public class MilestoneService {
         if (newStatus == MilestoneStatus.COMPLETED) {
             milestone.setCompletedAt(OffsetDateTime.now());
         }
+
         milestone.setStatus(newStatus);
         MilestoneResponseDTO result = toResponseDTO(milestoneRepository.save(milestone));
 

@@ -8,6 +8,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "applications")
@@ -46,6 +48,10 @@ public class Application {
      */
     @Column(columnDefinition = "TEXT")
     private String formData;
+
+    @OneToMany(mappedBy = "application", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<ApplicationMember> teamSnapshot = new ArrayList<>();
 
     @CreationTimestamp
     private LocalDateTime createdAt;

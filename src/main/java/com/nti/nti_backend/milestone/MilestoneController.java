@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,10 +20,17 @@ import java.util.UUID;
 @RequestMapping("/api/milestones")
 @RequiredArgsConstructor
 public class MilestoneController {
+
+    private static final String WRITE_ROLES =
+            "hasAnyRole('ADMIN','SUPER_ADMIN','MENTOR','STUDENT')";
+    private static final String READ_ROLES =
+            "hasAnyRole('ADMIN','SUPER_ADMIN','MENTOR','STUDENT','FIRM','FIRM_USER')";
+
     private final MilestoneService milestoneService;
 
     // POST /api/milestones
     @PostMapping
+    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneResponseDTO> create(
             @Valid @RequestBody MilestoneRequestDTO dto
             ) {
@@ -34,6 +42,7 @@ public class MilestoneController {
 
     // GET /api/milestones
     @GetMapping
+    @PreAuthorize(READ_ROLES)
     public ResponseEntity<List<MilestoneResponseDTO>> findAll(
             @RequestParam(required = false) Long applicationId,
             @RequestParam(required = false) UUID mentorshipId,
@@ -46,6 +55,7 @@ public class MilestoneController {
 
     // GET /api/milestones/{id}
     @GetMapping("/{id}")
+    @PreAuthorize(READ_ROLES)
     public ResponseEntity<MilestoneResponseDTO> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(milestoneService.findById(id));
     }
@@ -59,6 +69,7 @@ public class MilestoneController {
 
     // PUT /api/milestones/{id} - title, description, dueDate
     @PutMapping("/{id}")
+    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneResponseDTO> update(
             @PathVariable UUID id,
             @Valid @RequestBody MilestoneRequestDTO dto
@@ -68,6 +79,7 @@ public class MilestoneController {
 
     // PATCH /api/milestones/{id}/status - status
     @PatchMapping("/{id}/status")
+    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneResponseDTO> changeStatus(
             @PathVariable UUID id,
             @Valid @RequestBody ChangeStatusRequestDTO dto
@@ -77,11 +89,13 @@ public class MilestoneController {
 
     // GET /api/milestones/pending-approval
     @GetMapping("/pending-approval")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','MENTOR')")
     public ResponseEntity<List<MilestoneResponseDTO>> getPendingApproval() {
         return ResponseEntity.ok(milestoneService.getPendingApproval());
     }
 
     @PostMapping("/{id}/comments")
+    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneCommentDTO> addComment(
             @PathVariable UUID id,
             @Valid @RequestBody MilestoneCommentRequest dto,
@@ -92,6 +106,7 @@ public class MilestoneController {
     }
 
     @GetMapping("/{id}/comments")
+    @PreAuthorize(READ_ROLES)
     public ResponseEntity<List<MilestoneCommentDTO>> getComments(
             @PathVariable UUID id
     ) {
@@ -99,6 +114,7 @@ public class MilestoneController {
     }
 
     @DeleteMapping("/{id}/comments/{commentId}")
+    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<Void> deleteComment(
             @PathVariable UUID id,
             @PathVariable UUID commentId,
@@ -109,6 +125,7 @@ public class MilestoneController {
     }
 
     @PostMapping("/{id}/attachments")
+    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneAttachmentDTO> addAttachment(
             @PathVariable UUID id,
             @RequestParam("file") MultipartFile file,
@@ -119,6 +136,7 @@ public class MilestoneController {
     }
 
     @GetMapping("/{id}/attachments")
+    @PreAuthorize(READ_ROLES)
     public ResponseEntity<List<MilestoneAttachmentDTO>> getAttachments(
             @PathVariable UUID id
     ) {
@@ -126,6 +144,7 @@ public class MilestoneController {
     }
 
     @DeleteMapping("/{id}/attachments/{attachmentId}")
+    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<Void> deleteAttachment(
             @PathVariable UUID id,
             @PathVariable UUID attachmentId,
@@ -137,6 +156,7 @@ public class MilestoneController {
 
     // GET /api/milestones/{id}/attachments/{attachmentId}/file?inline=true
     @GetMapping("/{id}/attachments/{attachmentId}/file")
+    @PreAuthorize(READ_ROLES)
     public ResponseEntity<Resource> serveAttachment(
             @PathVariable UUID id,
             @PathVariable UUID attachmentId,

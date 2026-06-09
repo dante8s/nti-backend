@@ -1,6 +1,7 @@
 package com.nti.nti_backend.application;
 
 import com.nti.nti_backend.Application;
+import com.nti.nti_backend.file.FileTypeValidator;
 import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.UUID;
@@ -88,7 +90,7 @@ public class ApplicationController {
 
     // Одна заявка (власник, ментор, комісія, адмін)
     @GetMapping("/applications/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('STUDENT','MENTOR','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN','FIRM','FIRM_USER')")
     public ResponseEntity<?> getOne(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
@@ -117,14 +119,17 @@ public class ApplicationController {
             @PathVariable String documentType,
             @RequestParam("file") MultipartFile file) {
 
-        String contentType = file.getContentType();
-        boolean isPdf = "application/pdf".equals(contentType);
-        boolean isDocx = ("application/vnd.openxmlformats"
-                + "-officedocument.wordprocessingml.document")
-                .equals(contentType);
-
-        if (!isPdf && !isDocx) return ResponseEntity.badRequest().build();
         if (file.getSize() > 10L * 1024 * 1024) return ResponseEntity.badRequest().build();
+
+        boolean isPdf;
+        boolean isDocx;
+        try {
+            isPdf = FileTypeValidator.isPdf(file);
+            isDocx = FileTypeValidator.isDocx(file);
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (!isPdf && !isDocx) return ResponseEntity.badRequest().build();
 
         try {
             String uploadDir = "uploads/applications/" + id + "/";
@@ -147,16 +152,16 @@ public class ApplicationController {
         }
     }
 
-    // Всі заявки — ADMIN
+    // Всі заявки — ADMIN / SUPER_ADMIN
     @GetMapping("/admin/applications")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<ApplicationDTO>> getAll() {
         return ResponseEntity.ok(appService.getAll());
     }
 
     // Змінити статус — адмін або уповноважений комісії (SUPER_EVALUATOR)
     @PatchMapping("/admin/applications/{id}/status")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_EVALUATOR')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','SUPER_EVALUATOR')")
     public ResponseEntity<?> changeStatus(
             @AuthenticationPrincipal User admin,
             @PathVariable Long id,
@@ -193,6 +198,69 @@ public class ApplicationController {
             @PathVariable Long callId
     ) {
         return ResponseEntity.ok(appService.getByCall(callId));
+    }
+
+    /** Завершити проект — лідер команди */
+    @PatchMapping("/applications/{id}/complete")
+    @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
+    public ResponseEntity<?> completeProject(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appService.completeProject(id, user.getId(), false));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Завершити проект — адмін */
+    @PatchMapping("/admin/applications/{id}/complete")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> completeProjectAdmin(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appService.completeProject(id, user.getId(), true));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Список запитів на завершення — для адміна */
+    @GetMapping("/admin/applications/completion-requests")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> getCompletionRequests() {
+        return ResponseEntity.ok(appService.getCompletionRequests());
+    }
+
+    /** Адмін підтверджує завершення проекту */
+    @PatchMapping("/admin/applications/{id}/approve-completion")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> approveCompletion(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appService.approveCompletion(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /** Адмін відхиляє запит на завершення */
+    @PatchMapping("/admin/applications/{id}/reject-completion")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<?> rejectCompletion(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(appService.rejectCompletion(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /** Історія проектів поточного користувача */
+    @GetMapping("/applications/my/projects")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ProjectHistoryDTO> getMyProjects(
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(appService.getMyProjects(user.getId()));
     }
 }
 

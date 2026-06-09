@@ -10,6 +10,7 @@ import com.nti.nti_backend.mentorship.entity.Mentorship;
 import com.nti.nti_backend.mentorship.entity.MentorshipStatus;
 import com.nti.nti_backend.mentorship.repository.ConsultationRepository;
 import com.nti.nti_backend.mentorship.repository.MentorshipRepository;
+import com.nti.nti_backend.notification.NotificationService;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
 import com.nti.nti_backend.user.Role;
@@ -39,6 +40,7 @@ public class MentorshipService {
     private final UserRepository userRepository;
     private final ApplicationRepository applicationRepository;
     private final ConsultationRepository consultationRepository;
+    private final NotificationService notificationService;
 
     private boolean isAdminOrSuperAdmin(User user) {
         return user.hasRole(Role.ADMIN) || user.hasRole(Role.SUPER_ADMIN);
@@ -112,7 +114,17 @@ public class MentorshipService {
                 .status(MentorshipStatus.ACTIVE)
                 .build();
 
-        return toResponseDTO(mentorshipRepository.save(mentorship));
+        Mentorship saved = mentorshipRepository.save(mentorship);
+
+        if (application != null) {
+            notificationService.notifyMentorAssigned(
+                    application.getApplicant(),
+                    mentor.getName(),
+                    application.getId()
+            );
+        }
+
+        return toResponseDTO(saved);
     }
 
     // GET my mentorships (mentor)

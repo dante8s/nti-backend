@@ -2,6 +2,7 @@ package com.nti.nti_backend.evaluation;
 
 import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.application.ApplicationRepository;
+import com.nti.nti_backend.audit.AuditService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,13 +19,16 @@ public class EvaluationService {
     private final EvaluationRepository evaluationRepository;
     private final CriteriaRepository criteriaRepository;
     private final ApplicationRepository applicationRepository;
+    private final AuditService auditService;
 
     public EvaluationService(EvaluationRepository evaluationRepository,
                              CriteriaRepository criteriaRepository,
-                             ApplicationRepository applicationRepository) {
+                             ApplicationRepository applicationRepository,
+                             AuditService auditService) {
         this.evaluationRepository = evaluationRepository;
         this.criteriaRepository = criteriaRepository;
         this.applicationRepository = applicationRepository;
+        this.auditService = auditService;
     }
 
     @Caching(evict = {
@@ -58,7 +62,7 @@ public class EvaluationService {
             throw new IllegalStateException("The score must be between 1 and 100");
         }
 
-        return evaluationRepository
+        Evaluation saved = evaluationRepository
                 .findByApplication_IdAndEvaluator_IdAndCriteria_Id(appId, evaluatorId, criteriaId)
                 .map(existing -> {
                     existing.setScore(evaluation.getScore());
@@ -67,6 +71,10 @@ public class EvaluationService {
                     return evaluationRepository.save(existing);
                 })
                 .orElseGet(() -> evaluationRepository.save(evaluation));
+
+        auditService.log(evaluation.getEvaluator(), "EVALUATION_SUBMITTED", "APPLICATION", appId,
+                "Оцінка " + evaluation.getScore() + "/100 за критерієм id=" + criteriaId);
+        return saved;
     }
 
     @Transactional(readOnly = true)

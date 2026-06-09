@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record ApplicationDTO(
         Long id,
+        Long applicantId,
         Long callId,
         String callTitle,
         String programName,
@@ -16,8 +17,7 @@ public record ApplicationDTO(
         String organizationName,
         Long productOwnerId,
         String productOwnerName,
-        Long applicantId,
-        String formData,        // JSON-рядок з даними форми
+        String formData,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         List<MemberSnapshotDTO> teamMembers

@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,8 +22,9 @@ public class MentorshipController {
 
     private final MentorshipService mentorshipService;
 
-    // POST /api/mentorships
+    // POST /api/mentorships — тільки адмін призначає ментора
     @PostMapping("/mentorships")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<MentorshipResponseDTO> assignMentor(
             @Valid @RequestBody AssignMentorRequestDTO dto
             ) {
@@ -30,8 +32,8 @@ public class MentorshipController {
     }
 
     // GET /api/mentorships/my
-    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN')")
     @GetMapping("/mentorships/my")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<MentorshipResponseDTO>> getMyMentorships(
             @AuthenticationPrincipal User user
     ) {
@@ -40,6 +42,7 @@ public class MentorshipController {
 
     // GET /api/mentorships/{id}
     @GetMapping("/mentorships/{id}")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN','STUDENT')")
     public ResponseEntity<MentorshipResponseDTO> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(mentorshipService.getById(id));
     }
@@ -53,6 +56,7 @@ public class MentorshipController {
 
     // PATCH /api/mentorships/{id}/status
     @PatchMapping("/mentorships/{id}/status")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<MentorshipResponseDTO> closeMentorship(
             @PathVariable UUID id,
             @RequestParam MentorshipStatus status
@@ -60,20 +64,22 @@ public class MentorshipController {
         return ResponseEntity.ok(mentorshipService.closeMentorship(id, status));
     }
 
-    // GET /api/public/mentors
+    // GET /api/public/mentors — публічний, без @PreAuthorize (дозволено в SecurityConfig)
     @GetMapping("/public/mentors")
     public ResponseEntity<List<PublicMentorDTO>> getPublicMentors() {
         return ResponseEntity.ok(mentorshipService.getPublicMentors());
     }
 
-    // GET /api/mentorships
+    // GET /api/mentorships — всі менторства (тільки адмін)
     @GetMapping("/mentorships")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<MentorshipResponseDTO>> getAll() {
         return ResponseEntity.ok(mentorshipService.getAll());
     }
 
     // GET api/mentorships/by-application/{applicationId}
     @GetMapping("/mentorships/by-application/{applicationId}")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN','STUDENT','FIRM','FIRM_USER')")
     public ResponseEntity<List<MentorshipResponseDTO>> getByApplication(
             @PathVariable Long applicationId
     ) {
@@ -81,6 +87,7 @@ public class MentorshipController {
     }
 
     @PostMapping("/consultations")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<ConsultationResponseDTO> createConsultation(
             @Valid @RequestBody ConsultationRequestDTO dto) {
         return ResponseEntity.status(201)
@@ -88,6 +95,7 @@ public class MentorshipController {
     }
 
     @GetMapping("/consultations")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN','STUDENT')")
     public ResponseEntity<List<ConsultationResponseDTO>> getConsultationsByMentorship(
             @RequestParam UUID mentorshipId
     ) {
@@ -96,6 +104,7 @@ public class MentorshipController {
     }
 
     @PutMapping("/consultations/{id}")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<ConsultationResponseDTO> updateConsultation(
             @PathVariable UUID id,
             @Valid @RequestBody ConsultationRequestDTO dto
@@ -104,6 +113,7 @@ public class MentorshipController {
     }
 
     @DeleteMapping("/consultations/{id}")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Void> deleteConsultation(@PathVariable UUID id) {
         mentorshipService.deleteConsultation(id);
         return ResponseEntity.noContent().build();

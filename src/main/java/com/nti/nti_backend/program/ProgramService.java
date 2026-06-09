@@ -4,6 +4,7 @@ import com.nti.nti_backend.organization.entity.OrgMemberRole;
 import com.nti.nti_backend.organization.entity.Organization;
 import com.nti.nti_backend.organization.repository.OrgMemberRepository;
 import com.nti.nti_backend.organization.repository.OrganizationRepository;
+import com.nti.nti_backend.exception.AppException;
 import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -35,9 +36,9 @@ public class ProgramService {
 
     public ProgramDTO getByIdAndType(Long id, ProgramType type) {
         Program program = programRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Program Not Found"));
+                .orElseThrow(() -> AppException.notFound("Program Not Found"));
         if (program.getType() != type) {
-            throw new RuntimeException("Program Not Found");
+            throw AppException.notFound("Program Not Found");
         }
         return toDTO(program);
     }
@@ -64,10 +65,10 @@ public class ProgramService {
                 .filter(m -> m.getRole() == OrgMemberRole.OWNER)
                 .map(m -> m.getOrganization().getId())
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Organization Not Found"));
+                .orElseThrow(() -> AppException.notFound("Organization Not Found"));
 
         Organization org = organizationRepository.findById(orgId)
-                .orElseThrow(() -> new RuntimeException("Organization Not Found"));
+                .orElseThrow(() -> AppException.notFound("Organization Not Found"));
 
         Program program = Program.builder()
                 .name(dto.name())
@@ -87,7 +88,7 @@ public class ProgramService {
 
         if (program.getStatus() != ProgramStatus.DRAFT
         && program.getStatus() != ProgramStatus.NEEDS_REVISION) {
-            throw new RuntimeException("Only DRAFT or NEEDS_REVISION programs can be submitted for review");
+            throw AppException.badRequest("Only DRAFT or NEEDS_REVISION programs can be submitted for review");
         }
 
         program.setStatus(ProgramStatus.PENDING_REVIEW);
@@ -103,9 +104,7 @@ public class ProgramService {
 
         if (program.getStatus() != ProgramStatus.DRAFT
         && program.getStatus() != ProgramStatus.NEEDS_REVISION) {
-            throw new RuntimeException(
-                    "Cannot edit a program with status: " + program.getStatus()
-            );
+            throw AppException.badRequest("Cannot edit a program with status: " + program.getStatus());
         }
 
         program.setName(dto.name());
@@ -139,10 +138,10 @@ public class ProgramService {
     @Transactional
     public ProgramDTO review(Long id, ReviewProgramRequest dto) {
         Program program = programRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Program Not Found"));
+                .orElseThrow(() -> AppException.notFound("Program Not Found"));
 
         if (program.getStatus() != ProgramStatus.PENDING_REVIEW) {
-            throw new RuntimeException("Cannot review a program with status: " + program.getStatus());
+            throw AppException.badRequest("Cannot review a program with status: " + program.getStatus());
         }
 
         ProgramStatus newStatus = ProgramStatus.valueOf(dto.status());
@@ -150,7 +149,7 @@ public class ProgramService {
         if (newStatus != ProgramStatus.APPROVED
                 && newStatus != ProgramStatus.NEEDS_REVISION
                 && newStatus != ProgramStatus.REJECTED) {
-            throw new RuntimeException("Invalid review status: " + newStatus);
+            throw AppException.badRequest("Invalid review status: " + newStatus);
         }
 
         program.setStatus(newStatus);
@@ -163,7 +162,7 @@ public class ProgramService {
     @Transactional
     public ProgramDTO update(Long id, ProgramDTO dto) {
         Program program = programRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Program Not Found"));
+                .orElseThrow(() -> AppException.notFound("Program Not Found"));
         program.setName(dto.name());
         program.setDescription(dto.description());
         return toDTO(programRepository.save(program));
@@ -174,7 +173,7 @@ public class ProgramService {
     @Transactional
     public void deactivate(Long id) {
         Program program = programRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Program Not Found"));
+                .orElseThrow(() -> AppException.notFound("Program Not Found"));
         program.setStatus(ProgramStatus.REJECTED);
         programRepository.save(program);
     }
@@ -200,7 +199,7 @@ public class ProgramService {
 
     private Program getProgramOwnedByUser(Long programId, User currentUser) {
         Program program = programRepository.findById(programId)
-                .orElseThrow(() -> new RuntimeException("Program Not Found"));
+                .orElseThrow(() -> AppException.notFound("Program Not Found"));
 
         boolean ownsOrg = orgMemberRepository.findAllByUserId(currentUser.getId())
                 .stream()
@@ -208,7 +207,7 @@ public class ProgramService {
                 .anyMatch(m -> m.getOrganization().getId()
                         .equals(program.getOrganization().getId()));
         if (!ownsOrg) {
-            throw new RuntimeException("You do not own this program");
+            throw AppException.forbidden("You do not own this program");
         }
 
         return program;

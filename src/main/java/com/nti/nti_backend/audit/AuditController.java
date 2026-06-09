@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -26,9 +27,18 @@ public class AuditController {
     private final AuditService auditService;
     private final ApplicationRepository applicationRepository;
 
+    // Загальний журнал аудиту — тільки SUPER_ADMIN
+    @GetMapping("/admin/audit")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<List<AuditEventDTO>> getAll(
+            @RequestParam(required = false) String entityType,
+            @RequestParam(required = false) String action) {
+        return ResponseEntity.ok(auditService.getAll(entityType, action));
+    }
+
     @GetMapping("/applications/{id}/audit")
     @PreAuthorize(
-            "hasAnyRole('ADMIN','SUPER_ADMIN','STUDENT','EVALUATOR','SUPER_EVALUATOR')"
+            "hasAnyRole('ADMIN','SUPER_ADMIN','STUDENT','MENTOR','EVALUATOR','SUPER_EVALUATOR')"
     )
     public ResponseEntity<List<AuditEventDTO>> getApplicationAudit(
             @AuthenticationPrincipal User user,

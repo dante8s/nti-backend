@@ -8,6 +8,7 @@ import com.nti.nti_backend.organization.entity.OrgMember;
 import com.nti.nti_backend.organization.entity.OrgMemberRole;
 import com.nti.nti_backend.organization.entity.OrgStatus;
 import com.nti.nti_backend.organization.entity.Organization;
+import com.nti.nti_backend.exception.AppException;
 import com.nti.nti_backend.organization.exception.ConflictException;
 import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
 import com.nti.nti_backend.organization.repository.OrgMemberRepository;
@@ -565,7 +566,7 @@ public class OrganizationService {
             return filePath.toString();
 
         } catch (IOException e) {
-            throw new RuntimeException("Failed to store file: " + e.getMessage());
+            throw AppException.serverError("Failed to store file: " + e.getMessage(), e);
         }
     }
 

@@ -61,6 +61,14 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
     long countByInviteStatus(TeamMember.InviteStatus status);
 
+    @Query("""
+            SELECT m FROM TeamMember m
+            JOIN FETCH m.user
+            WHERE m.team.leader.id = :leaderId
+              AND m.inviteStatus = 'ACCEPTED'
+            """)
+    List<TeamMember> findAcceptedMembersByTeamLeader(@Param("leaderId") Long leaderId);
+
     /**
      * True when both users have ACCEPTED membership on the same team (teammates).
      */

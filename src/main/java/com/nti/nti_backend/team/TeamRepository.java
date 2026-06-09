@@ -15,6 +15,7 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
     @Query("""
         SELECT t FROM Team t
+        JOIN FETCH t.leader
         JOIN t.members m
         WHERE m.user.id = :userId
         AND m.inviteStatus = 'ACCEPTED'
