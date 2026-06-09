@@ -236,11 +236,21 @@ public class AuthService {
         user.setName(request.name());
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setInviteToken(null);
-        user.setEnabled(true);
-        user.setAccountStatus(AccountStatus.APPROVED);
+        user.setEnabled(false);
+        user.setAccountStatus(AccountStatus.PENDING);
         userRepository.save(user);
 
-        return "Реєстрацію завершено. Ви можете увійти в систему та прийняти запрошення до команди.";
+        try {
+            emailService.sendNewUserNotification(
+                    user.getName(),
+                    user.getEmail(),
+                    "STUDENT"
+            );
+        } catch (Exception e) {
+            System.out.println("Admin notification failed");
+        }
+
+        return "Реєстрацію завершено. Очікуйте схвалення адміністратора.";
     }
 
     // -----------------------------------------------
