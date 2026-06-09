@@ -29,6 +29,12 @@ services:
     volumes:
       - redis-data:/data
     command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   backend:
     build: .
@@ -37,11 +43,14 @@ services:
     env_file: .env
     environment:
       DB_HOST: db
+      REDIS_HOST: redis
       APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:3000}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 

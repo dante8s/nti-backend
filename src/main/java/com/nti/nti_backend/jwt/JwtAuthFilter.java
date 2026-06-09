@@ -56,11 +56,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String email;
         try {
-            // 3. Пробуємо витягнути email
             email = jwtUtil.extractEmail(token);
         } catch (Exception e) {
-            // ❗ Прострочений або некоректний токен — просто пропускаємо
-            chain.doFilter(request, response);
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"message\":\"Token expired or invalid\"}");
             return;
         }
 
