@@ -22,5 +22,8 @@ public record ApplicationDTO(
         LocalDateTime updatedAt,
         List<MemberSnapshotDTO> teamMembers
 ) {
+    @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS,
+            include = JsonTypeInfo.As.PROPERTY,
+            property = "@class")
     public record MemberSnapshotDTO(Long userId, String email, String role) {}
 }

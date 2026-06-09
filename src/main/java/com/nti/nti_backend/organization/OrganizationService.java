@@ -19,6 +19,7 @@ import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.CacheManager;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -34,9 +35,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
+
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
 
 @Service
 @RequiredArgsConstructor
@@ -61,7 +64,19 @@ public class OrganizationService {
                 .getPrincipal();
     }
 
+    private boolean isAdminOrSuperAdmin(User user) {
+        return user.hasRole(Role.ADMIN) || user.hasRole(Role.SUPER_ADMIN);
+    }
+
+    private boolean isSuperAdmin(User user) {
+        return user.hasRole(Role.SUPER_ADMIN);
+    }
+
     // CREATE
+    @Caching(evict = {
+            @CacheEvict(value = ORGANIZATIONS, allEntries = true),
+            @CacheEvict(value = ORGANIZATIONS_PUBLIC, allEntries = true)
+    })
     @Transactional
     public OrganizationResponseDTO create(OrganizationRequestDTO dto) {
         if (orgRepository.existsByIco(dto.getIco())) {
@@ -96,7 +111,7 @@ public class OrganizationService {
 
         OrgMember owner = OrgMember.builder()
                 .organization(org)
-                .user(getCurrentUser())
+                .user(currentUser)
                 .role(OrgMemberRole.OWNER)
                 .build();
 
@@ -106,14 +121,16 @@ public class OrganizationService {
     }
 
     // Read All
+    @Cacheable(value = ORGANIZATIONS, unless = "#result == null || #result.isEmpty()")
     @Transactional(readOnly = true)
     public List<OrganizationResponseDTO> findAll() {
         return orgRepository.findAll().stream()
                 .map(this::toResponseDTOSlim)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     //Read One
+    @Cacheable(value = ORGANIZATION, key = "#id")
     @Transactional(readOnly = true)
     public OrganizationResponseDTO findById(UUID id) {
         Organization org = orgRepository.findByIdWithMembers(id)
@@ -122,18 +139,27 @@ public class OrganizationService {
     }
 
     // Update
+    @Caching(evict = {
+            @CacheEvict(value = ORGANIZATIONS, allEntries = true),
+            @CacheEvict(value = ORGANIZATION, key = "#id"),
+            @CacheEvict(value = ORGANIZATIONS_PUBLIC, allEntries = true)
+    })
     @Transactional
     public OrganizationResponseDTO update(UUID id, OrganizationRequestDTO dto) {
         Organization org = orgRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + id));
-        Long currentUserId = getCurrentUser().getId();
 
-        OrgMember membership = memberRepository
-                .findByOrganizationIdAndUserId(id, currentUserId)
-                .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
+        User currentUser = getCurrentUser();
+        boolean canEdit = isAdminOrSuperAdmin(currentUser);
 
-        if (membership.getRole() != OrgMemberRole.OWNER) {
-            throw new ConflictException("Only OWNER can edit this organization");
+        if (!canEdit) {
+            OrgMember membership = memberRepository
+                    .findByOrganizationIdAndUserId(id, currentUser.getId())
+                    .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
+
+            if (membership.getRole() != OrgMemberRole.OWNER) {
+                throw new ConflictException("Only OWNER can edit this organization");
+            }
         }
 
         if (!org.getIco().equals(dto.getIco()) && orgRepository.existsByIco(dto.getIco())) {
@@ -153,19 +179,26 @@ public class OrganizationService {
     }
 
     // Delete
+    @Caching(evict = {
+            @CacheEvict(value = ORGANIZATIONS, allEntries = true),
+            @CacheEvict(value = ORGANIZATION, key = "#id"),
+            @CacheEvict(value = ORGANIZATIONS_PUBLIC, allEntries = true),
+            @CacheEvict(value = ORG_MEMBERS, key = "#id")
+    })
     @Transactional
     public void delete(UUID id) {
         Organization org = orgRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + id));
+        User currentUser = getCurrentUser();
 
-        Long currentUserId = getCurrentUser().getId();
+        if (!isSuperAdmin(currentUser)) {
+            OrgMember membership = memberRepository
+                    .findByOrganizationIdAndUserId(id, currentUser.getId())
+                    .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
 
-        OrgMember membership = memberRepository
-                .findByOrganizationIdAndUserId(id, currentUserId)
-                .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
-
-        if (membership.getRole() != OrgMemberRole.OWNER) {
-            throw new ConflictException("Only OWNER can remove this organization");
+            if (membership.getRole() != OrgMemberRole.OWNER) {
+                throw new ConflictException("Only OWNER can remove this organization");
+            }
         }
 
         orgRepository.delete(org);
@@ -173,6 +206,7 @@ public class OrganizationService {
     }
 
     // GET members
+    @Cacheable(value = ORG_MEMBERS, key = "#orgId")
     @Transactional(readOnly = true)
     public List<OrgMemberDTO> getMembers(UUID orgId) {
         if (!orgRepository.existsById(orgId)) {
@@ -188,20 +222,20 @@ public class OrganizationService {
                         .role(m.getRole())
                         .joinedAt(m.getJoinedAt())
                         .build()
-                ).toList();
+                ).collect(Collectors.toList());
     }
 
     // ADD Member
+    @CacheEvict(value = ORG_MEMBERS, key = "#orgId")
     @Transactional
     public OrgMemberDTO addMember(UUID orgId, AddMemberRequestDTO dto) {
         Organization org = orgRepository.findById(orgId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found with id: " + orgId));
 
-        Long currentUserId = getCurrentUser().getId();
-        boolean isAdmin = getCurrentUser().hasRole(Role.ADMIN);
-        if (!isAdmin) {
+        User currentUser = getCurrentUser();
+        if (!isAdminOrSuperAdmin(currentUser)) {
             OrgMember requestingMember = memberRepository
-                    .findByOrganizationIdAndUserId(orgId,currentUserId)
+                    .findByOrganizationIdAndUserId(orgId,currentUser.getId())
                     .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
             if (requestingMember.getRole() != OrgMemberRole.OWNER) {
                 throw new ConflictException("Only OWNER or ADMIN can add members to this organization");
@@ -213,9 +247,10 @@ public class OrganizationService {
                         "No user found with email: " + dto.getEmail()
                 ));
 
-        if (memberRepository.existsByOrganizationIdAndUserId(orgId, userToAdd.getId())) {
+        if (!memberRepository.findAllByUserId(userToAdd.getId()).isEmpty()) {
             throw new ConflictException(
-                    "User " + dto.getEmail() + " already exists"
+                    "User " + dto.getEmail()
+                            + " is already a member of an organization"
             );
         }
 
@@ -239,6 +274,7 @@ public class OrganizationService {
                 .build();
     }
 
+    @CacheEvict(value = ORG_MEMBERS, key = "#orgId")
     @Transactional
     public void inviteMember(UUID orgId, InviteOrgMemberRequest request) {
         Organization org = orgRepository.findById(orgId)
@@ -247,9 +283,8 @@ public class OrganizationService {
                 ));
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
 
-        if (!isAdmin) {
+        if (!isAdminOrSuperAdmin(currentUser)) {
             OrgMember membership = memberRepository
                     .findByOrganizationIdAndUserId(orgId, currentUser.getId())
                     .orElseThrow(() -> new ConflictException(
@@ -264,9 +299,10 @@ public class OrganizationService {
         String email = request.email();
         // Deny if user already exists and is a member
         userRepository.findByEmail(email).ifPresent(existingUser -> {
-            if (memberRepository.existsByOrganizationIdAndUserId(orgId, existingUser.getId())) {
+            if (!memberRepository.findAllByUserId(existingUser.getId()).isEmpty()) {
                 throw new ConflictException(
-                        "User " + email + " is already a member of this organization"
+                        "User " + email
+                                + " is already a member of an organization"
                 );
             }
         });
@@ -281,7 +317,7 @@ public class OrganizationService {
                     .email(email)
                     .name("")
                     .password("")
-                    .roles(Set.of(Role.FIRM_USER))
+                    .roles(Set.of(Role.FIRM))
                     .emailVerified(true)
                     .enabled(false)
                     .accountStatus(AccountStatus.PENDING)
@@ -307,23 +343,27 @@ public class OrganizationService {
         return memberRepository.findAllByUserId(currentUserId)
                 .stream()
                 .map(m -> toResponseDTOSlim(m.getOrganization()))
-                .toList();
+                .collect(Collectors.toList());
     }
 
     // REMOVE Member
+    @CacheEvict(value = ORG_MEMBERS, key = "#orgId")
     public void removeMember(UUID orgId, UUID memberId) {
         if (!orgRepository.existsById(orgId)) {
             throw new ResourceNotFoundException("Organization not found with id: " + orgId);
         }
 
-        Long currentUserId = getCurrentUser().getId();
-        boolean isAdmin = getCurrentUser().hasRole(Role.ADMIN);
-        OrgMember requestingMember = memberRepository
-                .findByOrganizationIdAndUserId(orgId, currentUserId)
-                .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
+        User currentUser = getCurrentUser();
+        boolean canEdit = isAdminOrSuperAdmin(currentUser);
 
-        if (requestingMember.getRole() != OrgMemberRole.OWNER && !isAdmin) {
-            throw new ConflictException("Only the OWNER or ADMIN can remove members from this organization");
+        if (!canEdit) {
+            OrgMember requestingMember = memberRepository
+                    .findByOrganizationIdAndUserId(orgId, currentUser.getId())
+                    .orElseThrow(() -> new ConflictException("You are not a member of this organization"));
+
+            if (requestingMember.getRole() != OrgMemberRole.OWNER && !canEdit) {
+                throw new ConflictException("Only the OWNER or ADMIN can remove members from this organization");
+            }
         }
 
         OrgMember memberToRemove = memberRepository.findById(memberId).orElseThrow(
@@ -343,6 +383,7 @@ public class OrganizationService {
         memberRepository.delete(memberToRemove);
     }
 
+    @CacheEvict(value = ORG_MEMBERS, key = "#orgId")
     @Transactional
     public OrgMemberDTO transferOwnership(UUID orgId, UUID newOwnerMemberId) {
         if (!orgRepository.existsById(orgId)) {
@@ -352,8 +393,8 @@ public class OrganizationService {
         User currentUser = getCurrentUser();
         boolean isAdmin = currentUser.hasRole(Role.ADMIN);
 
-        if (!isAdmin) {
-            throw new ConflictException("Only ADMIN can transfer organization ownership");
+        if (!isAdminOrSuperAdmin(currentUser)) {
+            throw new ConflictException("Only ADMIN or SUPER_ADMIN can transfer organization ownership");
         }
 
         OrgMember newOwner = memberRepository.findById(newOwnerMemberId)
@@ -392,6 +433,7 @@ public class OrganizationService {
                 .build();
     }
 
+    @Cacheable(value = ORGANIZATIONS_PUBLIC, unless = "#result == null || #result.isEmpty()")
     @Transactional(readOnly = true)
     public List<PublicOrganizationDTO> getPublicOrganizations() {
         return orgRepository.findAllByStatus(OrgStatus.ACTIVE)
@@ -403,13 +445,18 @@ public class OrganizationService {
                         .website(org.getWebsite())
                         .description(org.getDescription())
                         .build()
-                ).toList();
+                ).collect(Collectors.toList());
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = ORGANIZATION, key = "#id"),
+            @CacheEvict(value = ORGANIZATIONS, allEntries = true),
+            @CacheEvict(value = ORGANIZATIONS_PUBLIC, allEntries = true)
+    })
     @Transactional
     public OrganizationResponseDTO changeStatus(UUID id, OrgStatus newStatus) {
         User currentUser = getCurrentUser();
-        if (!currentUser.hasRole(Role.ADMIN)) {
+        if (!isAdminOrSuperAdmin(currentUser)) {
             throw new ConflictException("Only ADMIN can change organization status");
         }
 
@@ -464,17 +511,24 @@ public class OrganizationService {
     public ProgramBRequirementsDTO uploadBudget(
             Long programId, MultipartFile file, User currentUser
     ) {
-        if (!currentUser.hasRole(Role.FIRM)) {
-            throw new ConflictException("Only  organization OWNER can upload attachments");
-        }
-
         Program program = programRepository.findById(programId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Program not found with id: " + programId));
-        if (program.getType() != ProgramType.PROGRAM_B) {
-            throw new ConflictException(
-                    "Budget only applies to Program B"
-            );
+                        "Program not found with id: " + programId
+                ));
+        if (program.getType() !=  ProgramType.PROGRAM_B) {
+            throw new ConflictException("Budget only applies to Program B");
+        }
+
+        boolean ownsProgram = memberRepository
+                .findAllByUserId(currentUser.getId())
+                .stream()
+                .filter(m -> m.getRole() == OrgMemberRole.OWNER)
+                .anyMatch(m -> program.getOrganization() != null
+                && m.getOrganization().getId()
+                        .equals(program.getOrganization().getId()));
+
+        if (!ownsProgram && !currentUser.hasRole(Role.ADMIN)) {
+            throw new ConflictException("You do not own this Program B");
         }
 
         String path = saveFile(file, programId, "budget");
@@ -482,7 +536,8 @@ public class OrganizationService {
                 .findByProgramId(programId)
                 .orElse(ProgramBRequirements.builder()
                         .program(program)
-                        .build());
+                        .build()
+                );
         req.setBudgetName(file.getOriginalFilename());
         req.setBudgetPath(path);
 
@@ -490,12 +545,12 @@ public class OrganizationService {
     }
 
     @Transactional(readOnly = true)
-    public ProgramBRequirementsDTO getByProgram(Long programId) {
+    public Optional<ProgramBRequirementsDTO> getByProgram(Long programId) {
         return requirementsRepository.findByProgramId(programId)
-                .map(this::toProgramBRequirementsDTO)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "No requirements found for application: " + programId
-                ));
+                .map(this::toProgramBRequirementsDTO);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "No requirements found for application: " + programId
+//                ));
     }
 
     private String saveFile(MultipartFile file, Long applicationId, String type) {
@@ -573,7 +628,6 @@ public class OrganizationService {
     private void checkFileAccess(ProgramBRequirements req, User currentUser) {
         if (currentUser.hasRole(Role.ADMIN)) return;
         if (currentUser.hasRole(Role.FIRM)
-                || currentUser.hasRole(Role.FIRM_USER)
         ) {
             boolean ownsOrg = memberRepository
                     .findAllByUserId(currentUser.getId())
@@ -613,7 +667,7 @@ public class OrganizationService {
                         .role(m.getRole())
                         .joinedAt(m.getJoinedAt())
                         .build()
-                ).toList();
+                ).collect(Collectors.toCollection(ArrayList::new));
         return buildDTO(org, memberDTOs);
     }
 

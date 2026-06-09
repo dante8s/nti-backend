@@ -7,11 +7,16 @@ import com.nti.nti_backend.organization.repository.OrganizationRepository;
 import com.nti.nti_backend.exception.AppException;
 import com.nti.nti_backend.user.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+
+import static com.nti.nti_backend.config.CacheNames.*;
 
 @Service
 @RequiredArgsConstructor
@@ -22,11 +27,11 @@ public class ProgramService {
     private final OrganizationRepository organizationRepository;
 
     // Public - approved programs by type
-    public List<ProgramDTO> getByType(ProgramType type) {
+    @Cacheable(value = PROGRAMS_PUBLIC, key = "#type", unless = "#result == null || #result.isEmpty()")    public List<ProgramDTO> getByType(ProgramType type) {
         return programRepository.findByTypeAndStatus(type, ProgramStatus.APPROVED)
                 .stream()
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     public ProgramDTO getByIdAndType(Long id, ProgramType type) {
@@ -39,6 +44,7 @@ public class ProgramService {
     }
 
     // Create Program A
+    @CacheEvict(value = PROGRAMS_PUBLIC, allEntries = true)
     @Transactional
     public ProgramDTO create(ProgramDTO dto) {
         Program program = Program.builder()
@@ -51,6 +57,7 @@ public class ProgramService {
     }
 
     // FIRM submits Program B - start as DRAFT
+    @CacheEvict(value = PROGRAMS_PUBLIC, allEntries = true)
     @Transactional
     public ProgramDTO submitProgramB(SubmitProgramBRequest dto, User currentUser) {
         UUID orgId = orgMemberRepository.findAllByUserId(currentUser.getId())
@@ -74,6 +81,7 @@ public class ProgramService {
     }
 
     // FIRM submits draft for review
+    @CacheEvict(value = PROGRAMS_PUBLIC, allEntries = true)
     @Transactional
     public ProgramDTO submitForReview(Long id, User currentUser) {
         Program program = getProgramOwnedByUser(id, currentUser);
@@ -89,6 +97,7 @@ public class ProgramService {
     }
 
     // FIRM edits their Program B when DRAFT or NEEDS_REVISION
+    @CacheEvict(value = PROGRAMS_PUBLIC, allEntries = true)
     @Transactional
     public ProgramDTO updateProgramB(Long id, SubmitProgramBRequest dto, User currentUser) {
         Program program = getProgramOwnedByUser(id, currentUser);
@@ -113,7 +122,7 @@ public class ProgramService {
                         .stream()
                 )
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     // Admin sees all pending review programs
@@ -121,10 +130,11 @@ public class ProgramService {
         return programRepository.findByStatus(ProgramStatus.PENDING_REVIEW)
                 .stream()
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     // Admin reviews
+    @CacheEvict(value = PROGRAMS_PUBLIC, allEntries = true)
     @Transactional
     public ProgramDTO review(Long id, ReviewProgramRequest dto) {
         Program program = programRepository.findById(id)
@@ -148,6 +158,7 @@ public class ProgramService {
     }
 
     // Admin updates Program A details
+    @CacheEvict(value = PROGRAMS_PUBLIC, allEntries = true)
     @Transactional
     public ProgramDTO update(Long id, ProgramDTO dto) {
         Program program = programRepository.findById(id)
@@ -158,12 +169,32 @@ public class ProgramService {
     }
 
     // Admin deactivates - sets to REJECTED
+    @CacheEvict(value = PROGRAMS_PUBLIC, allEntries = true)
     @Transactional
     public void deactivate(Long id) {
         Program program = programRepository.findById(id)
                 .orElseThrow(() -> AppException.notFound("Program Not Found"));
         program.setStatus(ProgramStatus.REJECTED);
         programRepository.save(program);
+    }
+
+    @CacheEvict(value = PROGRAMS_PUBLIC, allEntries = true)
+    @Transactional
+    public ProgramDTO assignOrganization(Long programId, UUID orgId) {
+        Program program = programRepository.findById(programId)
+                .orElseThrow(() -> new RuntimeException("Program not found"));
+
+        if (program.getType() != ProgramType.PROGRAM_B) {
+            throw new RuntimeException(
+                    "Organization can only be assigned to Program B");
+        }
+
+        Organization org = organizationRepository.findById(orgId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Organization not found: " + orgId));
+
+        program.setOrganization(org);
+        return toDTO(programRepository.save(program));
     }
 
     private Program getProgramOwnedByUser(Long programId, User currentUser) {

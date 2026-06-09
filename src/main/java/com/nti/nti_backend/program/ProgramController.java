@@ -9,6 +9,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -130,5 +131,13 @@ public class ProgramController {
         programService.deactivate(id);
         auditService.log(actor, "PROGRAM_DEACTIVATED", "PROGRAM", id, "Програму деактивовано");
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/api/admin/programs/{id}/organization")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<ProgramDTO> assignOrganization(
+            @PathVariable Long id,
+            @RequestParam UUID orgId) {
+        return ResponseEntity.ok(programService.assignOrganization(id, orgId));
     }
 }

@@ -27,7 +27,7 @@ public class ConsultationNoteController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN','STUDENT')")
+    @PreAuthorize("hasAnyRole('MENTOR','ADMIN','SUPER_ADMIN','STUDENT', 'FIRM')")
     public ResponseEntity<List<ConsultationNoteDTO>> getByApplication(
             @RequestParam Long applicationId
     ) {

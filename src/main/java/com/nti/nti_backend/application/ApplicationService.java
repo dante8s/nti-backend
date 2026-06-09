@@ -3,6 +3,8 @@ package com.nti.nti_backend.application;
 import com.nti.nti_backend.audit.AuditService;
 import com.nti.nti_backend.call.Call;
 import com.nti.nti_backend.call.CallRepository;
+import com.nti.nti_backend.organization.entity.Organization;
+import com.nti.nti_backend.organization.repository.OrgMemberRepository;
 import com.nti.nti_backend.exception.AppException;
 import com.nti.nti_backend.team.TeamRepository;
 import com.nti.nti_backend.teamMember.TeamMemberRepository;
@@ -35,12 +37,16 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
+import com.nti.nti_backend.exception.AppException;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ApplicationService {
 
+    /** Віддача файлу документа заявки (перегляд / завантаження). */
     public record ServedApplicationDocument(
             Resource resource,
             MediaType contentType,
@@ -55,6 +61,7 @@ public class ApplicationService {
     private final DocumentRepository documentRepository;
     private final EmailService emailService;
     private final AuditService auditService;
+    private final OrgMemberRepository memberRepository;
     private final ApplicationMemberRepository applicationMemberRepository;
     private final NotificationService notificationService;
     private final ProjectReportService projectReportService;
@@ -87,6 +94,7 @@ public class ApplicationService {
     );
 
     // Створити draft
+    @CacheEvict(value = APPLICATIONS_MY, key = "#applicant.id")
     public ApplicationDTO createDraft(User applicant, CreateApplicationRequest request) {
         Optional<Application> existing =
                 appRepository.findByApplicantIdAndCallId(applicant.getId(), request.callId());
@@ -125,6 +133,7 @@ public class ApplicationService {
     }
 
     // Оновити дані форми (тільки DRAFT або NEEDS_REVISION)
+    @CacheEvict(value = APPLICATIONS_MY, key = "#userId")
     public ApplicationDTO updateDraft(Long appId, Long userId, UpdateApplicationRequest request) {
         Application app = findAndCheckOwner(appId, userId);
 
@@ -149,8 +158,14 @@ public class ApplicationService {
     }
 
     // Відправити заявку
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true)
+    })
     @Transactional
-    public ApplicationDTO submit(Long appId, Long userId) {
+    public ApplicationDTO submit(
+            Long appId, Long userId) {
+
         Application app = findAndCheckOwner(appId, userId);
         assertApplicantIsTeamLeader(app.getApplicant());
         assertTeamIsFullyAssembled(app.getApplicant());
@@ -312,6 +327,9 @@ public class ApplicationService {
         return result;
     }
 
+    /**
+     * Файл обов'язкового документа для перегляду/завантаження (з диска).
+     */
     public ServedApplicationDocument serveApplicationDocument(
             Long applicationId, DocumentType documentType, User viewer) {
 
@@ -365,29 +383,34 @@ public class ApplicationService {
         return "pdf";
     }
 
-    // Від Max: повна логіка — лідер бачить свої заявки, учасник — заявки лідера своєї команди
+    @Cacheable(value = APPLICATIONS_MY, key = "#userId")
     @Transactional(readOnly = true)
     public List<ApplicationDTO> getMyApplications(Long userId) {
         if (teamRepository.findByLeader_Id(userId).isPresent()) {
             return appRepository.findByApplicantIdWithDetails(userId)
-                    .stream().map(this::toDTO).toList();
+                    .stream().map(this::toDTO).collect(Collectors.toCollection(ArrayList::new));
         }
 
         return teamRepository.findAcceptedTeamsByUserId(userId)
                 .stream().findFirst()
                 .map(team -> appRepository
                         .findByApplicantIdWithDetails(team.getLeader().getId())
-                        .stream().map(this::toDTO).toList())
-                .orElse(List.of());
+                        .stream().map(this::toDTO).collect(Collectors.toCollection(ArrayList::new)))
+                .orElseGet(ArrayList::new);
     }
 
+    // Одна заявка
     @Transactional
     public ApplicationDTO getById(Long id) {
         return toDTO(appRepository.findById(id)
                 .orElseThrow(() -> AppException.notFound("Заявку не знайдено")));
     }
 
+    // Всі заявки (ADMIN)
     @Transactional
+    /**
+     * Перегляд заявки з перевіркою прав: студент — лише своя; комісія та адмін — будь-яка.
+     */
     public ApplicationDTO getByIdForViewer(Long id, User viewer) {
         Application app = appRepository.findById(id)
                 .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
@@ -398,21 +421,56 @@ public class ApplicationService {
     }
 
     private boolean canViewApplication(User viewer, Application app) {
-        if (viewer.hasRole(Role.ADMIN) || viewer.hasRole(Role.SUPER_ADMIN)) return true;
-        if (viewer.hasRole(Role.EVALUATOR) || viewer.hasRole(Role.SUPER_EVALUATOR)) return true;
-        if (viewer.hasRole(Role.MENTOR)) return true;
-        return viewer.hasRole(Role.STUDENT) && app.getApplicant().getId().equals(viewer.getId());
+        if (viewer.hasRole(Role.ADMIN) || viewer.hasRole(Role.SUPER_ADMIN)) {
+            return true;
+        }
+        if (viewer.hasRole(Role.EVALUATOR) || viewer.hasRole(Role.SUPER_EVALUATOR)) {
+            return true;
+        }
+        if (viewer.hasRole(Role.MENTOR)) {
+            return true;
+        }
+        if (viewer.hasRole(Role.FIRM)) {
+            if (app.getCall() != null &&
+                    app.getCall().getProgram() != null &&
+                    app.getCall().getProgram().getOrganization() != null) {
+
+                UUID orgId = app.getCall().getProgram().getOrganization().getId();
+
+                boolean isMember = memberRepository.findByOrganizationIdAndUserId(orgId, viewer.getId()).isPresent();
+
+                if (isMember) {
+                    return true;
+                }
+            }
+        }
+
+        return viewer.hasRole(Role.STUDENT)
+                && app.getApplicant().getId().equals(viewer.getId());
     }
 
+    // Тільки не-чернетки для адміна
+    @Cacheable(value = APPLICATIONS_ALL)
     public List<ApplicationDTO> getAll() {
-        return appRepository.findAll().stream()
-                .filter(a -> a.getStatus() != ApplicationStatus.DRAFT)
+        return appRepository.findAll()
+                .stream()
+                .filter(a ->
+                        a.getStatus() != ApplicationStatus.DRAFT
+                )
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    public ApplicationDTO changeStatus(Long appId, ApplicationStatus newStatus,
-            String comment, User admin) {
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
+    })
+    public ApplicationDTO changeStatus(
+            Long appId,
+            ApplicationStatus newStatus,
+            String comment,
+            User admin) {
 
         Application app = appRepository.findById(appId)
                 .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
@@ -424,7 +482,11 @@ public class ApplicationService {
         app.setAdminComment(comment);
         Application saved = appRepository.save(app);
 
-        auditService.log(admin, "STATUS_CHANGED", "APPLICATION", appId,
+        auditService.log(
+                admin,
+                "STATUS_CHANGED",
+                "APPLICATION",
+                appId,
                 "Статус: " + old + " → " + newStatus
                         + (comment != null ? ". Коментар: " + comment : ""));
 
@@ -446,6 +508,12 @@ public class ApplicationService {
         return toDTO(saved);
     }
 
+    // set OWNER of the product
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
+    })
     @Transactional
     public ApplicationDTO setProductOwner(Long appId, Long userId, User currentUser) {
         Application app = appRepository.findById(appId)
@@ -456,6 +524,7 @@ public class ApplicationService {
             throw AppException.badRequest(
                     "Product owner can only be set on approved or active applications");
         }
+        // only program b
         if (app.getCall().getProgram().getType() != ProgramType.PROGRAM_B) {
             throw AppException.badRequest(
                     "Program owner can only be set on Program B applications");
@@ -468,11 +537,17 @@ public class ApplicationService {
         return toDTO(appRepository.save(app));
     }
 
+    @Cacheable(value = APPLICATIONS_CALL, key = "#callId")
     public List<ApplicationDTO> getByCall(Long callId) {
-        return appRepository.findByCallId(callId).stream().map(this::toDTO).toList();
+        return appRepository.findByCallId(callId).stream().map(this::toDTO).collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** Лідер надсилає запит на завершення проекту */
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
+    })
     public ApplicationDTO completeProject(Long appId, Long userId, boolean isAdmin) {
         Application app = appRepository.findById(appId)
                 .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
@@ -513,6 +588,12 @@ public class ApplicationService {
         return toDTO(saved);
     }
 
+    /** Адмін підтверджує завершення */
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
+    })
     /** Адмін підтверджує завершення.
      *  Program A: очікує COMPLETION_REQUESTED.
      *  Program B: очікує COMPLETION_PO_APPROVED. */
@@ -536,6 +617,11 @@ public class ApplicationService {
     }
 
     /** Адмін відхиляє запит на завершення — повертає APPROVED, повідомляє лідера */
+    @Caching(evict = {
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
+    })
     public ApplicationDTO rejectCompletion(Long appId) {
         Application app = appRepository.findById(appId)
                 .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
@@ -638,7 +724,7 @@ public class ApplicationService {
                 .filter(a -> a.getCall().getProgram().getType() == ProgramType.PROGRAM_B)
                 .filter(a -> a.getProductOwner() != null && a.getProductOwner().getId().equals(userId))
                 .map(this::toDTO)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** Всі юзери для призначення Product Owner (доступно ADMIN і SUPER_ADMIN) */
@@ -744,6 +830,7 @@ public class ApplicationService {
         return app;
     }
 
+
     private ApplicationDTO toDTO(Application a) {
         boolean isProgramB = a.getCall().getProgram().getType() == ProgramType.PROGRAM_B;
         UUID organizationId = null;
@@ -765,7 +852,7 @@ public class ApplicationService {
                         .stream()
                         .map(m -> new ApplicationDTO.MemberSnapshotDTO(
                                 m.getUserId(), m.getEmail(), m.getRole()))
-                        .toList();
+                        .collect(Collectors.toCollection(ArrayList::new));
 
         return new ApplicationDTO(
                 a.getId(),
@@ -806,6 +893,7 @@ public class ApplicationService {
         );
     }
 
+    /** Заявку на виклик подає лідер команди (applicant_id = leader). */
     private void assertApplicantIsTeamLeader(User applicant) {
         if (applicant.hasRole(Role.SUPER_ADMIN)) return;
         if (!teamRepository.findByLeader_Id(applicant.getId()).isPresent()) {
@@ -813,6 +901,7 @@ public class ApplicationService {
         }
     }
 
+    /** Команда повністю укомплектована (кількість ACCEPTED == maxCapacity). */
     private void assertTeamIsFullyAssembled(User applicant) {
         if (applicant.hasRole(Role.SUPER_ADMIN)) return;
         teamRepository.findByLeader_Id(applicant.getId()).ifPresent(team -> {

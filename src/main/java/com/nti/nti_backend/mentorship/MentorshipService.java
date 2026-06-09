@@ -1,8 +1,9 @@
 package com.nti.nti_backend.mentorship;
 
-
+import static com.nti.nti_backend.config.CacheNames.*;
 import com.nti.nti_backend.application.Application;
 import com.nti.nti_backend.application.ApplicationRepository;
+import com.nti.nti_backend.application.ApplicationStatus;
 import com.nti.nti_backend.mentorship.dto.*;
 import com.nti.nti_backend.mentorship.entity.Consultation;
 import com.nti.nti_backend.mentorship.entity.Mentorship;
@@ -16,6 +17,9 @@ import com.nti.nti_backend.user.Role;
 import com.nti.nti_backend.user.User;
 import com.nti.nti_backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
+
+import static com.nti.nti_backend.config.CacheNames.MENTORSHIPS_MY;
 
 
 @Service
@@ -35,6 +42,13 @@ public class MentorshipService {
     private final ConsultationRepository consultationRepository;
     private final NotificationService notificationService;
 
+    private boolean isAdminOrSuperAdmin(User user) {
+        return user.hasRole(Role.ADMIN) || user.hasRole(Role.SUPER_ADMIN);
+    }
+
+    private boolean isSuperAdmin(User user) {
+        return user.hasRole(Role.SUPER_ADMIN);
+    }
 
     private User getCurrentUser() {
         return (User) SecurityContextHolder.getContext()
@@ -43,8 +57,18 @@ public class MentorshipService {
     }
 
     // ASSIGN MENTOR
+    @Caching(evict = {
+            @CacheEvict(value = MENTORSHIPS_MY, allEntries = true),
+            @CacheEvict(value = MENTORS_PUBLIC, allEntries = true)
+    })
     @Transactional
     public MentorshipResponseDTO assignMentor(AssignMentorRequestDTO dto) {
+        User currentUser = getCurrentUser();
+        if (!isAdminOrSuperAdmin(currentUser)) {
+            throw new ConflictException(
+                    "Only ADMIN or SUPER_ADMIN can assign mentors"
+            );
+        }
 
         User mentor = userRepository.findById(
                 dto.getMentorUserId()
@@ -64,6 +88,12 @@ public class MentorshipService {
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Application not found: " + dto.getApplicationId()
                     ));
+
+            if (application.getStatus() != ApplicationStatus.APPROVED) {
+                throw new ConflictException(
+                        "Mentorship can only be assigned to approved application"
+                );
+            }
 
             boolean alreadyExists = mentorshipRepository
                     .existsByMentorIdAndApplication_IdAndStatus(
@@ -98,17 +128,18 @@ public class MentorshipService {
     }
 
     // GET my mentorships (mentor)
+    @Cacheable(value = MENTORSHIPS_MY, key = "#userId")
     @Transactional(readOnly = true)
-    public List<MentorshipResponseDTO> getMyMentorships() {
-        Long currentUserId = getCurrentUser().getId();
+    public List<MentorshipResponseDTO> getMyMentorships(Long userId) {
         return mentorshipRepository
-                .findAllByMentorIdAndStatus(currentUserId, MentorshipStatus.ACTIVE)
+                .findAllByMentorIdAndStatus(userId, MentorshipStatus.ACTIVE)
                 .stream()
                 .map(this::toResponseDTO)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     // Get by id
+    @Cacheable(value = MENTORSHIP, key = "#id")
     @Transactional(readOnly = true)
     public MentorshipResponseDTO getById(UUID id) {
         Mentorship mentorship = mentorshipRepository.findById(id)
@@ -117,10 +148,14 @@ public class MentorshipService {
                 ));
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
+        boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
         boolean isMentor = mentorship.getMentor().getId().equals(currentUser.getId());
+        boolean isStudentOfApplication = mentorship.getApplication() != null
+                && currentUser.hasRole(Role.STUDENT)
+                && mentorship.getApplication().getApplicant().getId()
+                .equals(currentUser.getId());
 
-        if (!isAdmin && !isMentor) {
+        if (!isAdminOrSuper && !isMentor && !isStudentOfApplication) {
             throw new ConflictException("You do not have access to this mentorship");
         }
 
@@ -129,6 +164,10 @@ public class MentorshipService {
     }
 
     // Close Mentorship
+    @Caching(evict = {
+            @CacheEvict(value = MENTORSHIP, key = "#id"),
+            @CacheEvict(value = MENTORSHIPS_MY, allEntries = true)
+    })
     @Transactional
     public MentorshipResponseDTO closeMentorship(UUID id, MentorshipStatus newStatus) {
         Mentorship mentorship = mentorshipRepository.findById(id)
@@ -144,10 +183,9 @@ public class MentorshipService {
         }
 
         User currentUser = getCurrentUser();
-        boolean isAdmin = currentUser.hasRole(Role.ADMIN);
 
 
-        if  (!isAdmin) {
+        if  (!isAdminOrSuperAdmin(currentUser)) {
             throw new ConflictException("You cannot close this mentorship");
         }
 
@@ -158,16 +196,32 @@ public class MentorshipService {
         return toResponseDTO(mentorship);
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = MENTORSHIP, key = "#id"),
+            @CacheEvict(value = MENTORSHIPS_MY, allEntries = true)
+    })
+    @Transactional
+    public void deleteMentorship(UUID id) {
+        if (!isSuperAdmin(getCurrentUser())) {
+            throw new ConflictException("You do not have access to this mentorship");
+        }
+
+        Mentorship mentorship = mentorshipRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Mentorship not found: " + id));
+        mentorshipRepository.delete(mentorship);
+    }
+
     @Transactional(readOnly = true)
     public List<MentorshipResponseDTO> getAll() {
         User currentUser = getCurrentUser();
-        if (!currentUser.hasRole(Role.ADMIN)) {
+        if (!isAdminOrSuperAdmin(currentUser)) {
             throw new ConflictException("Only ADMIN can view all mentorships");
         }
         return mentorshipRepository.findAll()
                 .stream()
                 .map(this::toResponseDTO)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -175,7 +229,7 @@ public class MentorshipService {
         return mentorshipRepository.findAllByApplication_Id(applicationId)
                 .stream()
                 .map(this::toResponseDTO)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -207,9 +261,27 @@ public class MentorshipService {
 
     @Transactional(readOnly = true)
     public List<ConsultationResponseDTO> getConsultationsByMentorshipId(UUID mentorshipId) {
+        Mentorship mentorship = mentorshipRepository.findById(mentorshipId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Mentorship not found: " + mentorshipId
+                ));
+        User currentUser = getCurrentUser();
+        boolean isAdminOrSuper = isAdminOrSuperAdmin(currentUser);
+        boolean isAssignedMentor = mentorship.getMentor().getId()
+                .equals(currentUser.getId());
+        boolean isStudentOfApplication = mentorship.getApplication() != null
+                && currentUser.hasRole(Role.STUDENT)
+                && mentorship.getApplication().getApplicant().getId()
+                .equals(currentUser.getId());
+
+        if (!isAdminOrSuper && !isAssignedMentor && !isStudentOfApplication) {
+            throw new ConflictException(
+                    "You do not have access to these notes");
+        }
+
         return consultationRepository
                 .findAllByMentorshipIdOrderByConsultationDateDesc(mentorshipId)
-                .stream().map(this::toConsultationDTO).toList();
+                .stream().map(this::toConsultationDTO).collect(Collectors.toList());
     }
 
     @Transactional
@@ -220,9 +292,13 @@ public class MentorshipService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Consultation not found: " + id
                 ));
-        if (!consultation.getMentor().getId().equals(currentUser.getId())) {
+        boolean isSuperAdmin = isSuperAdmin(currentUser);
+        boolean isAuthor = consultation.getMentor().getId()
+                .equals(currentUser.getId());
+
+        if (!isAuthor && !isSuperAdmin) {
             throw new ConflictException(
-                    "Only the author can edit this consultation"
+                    "Only the author or SUPER_ADMIN can edit this consultation"
             );
         }
 
@@ -237,14 +313,15 @@ public class MentorshipService {
     public void deleteConsultation(UUID id) {
         User currentUser = getCurrentUser();
 
-        if (!currentUser.hasRole(Role.ADMIN)) {
-            throw new ConflictException("Only ADMIN can delete consultations");
-        }
-
         Consultation consultation = consultationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Consultation not found: " + id
                 ));
+        boolean isSuperAdmin = isSuperAdmin(currentUser);
+        if (!isSuperAdmin) {
+            throw new ConflictException("Only ADMIN can delete consultations");
+        }
+
         consultationRepository.delete(consultation);
     }
 
@@ -280,6 +357,7 @@ public class MentorshipService {
                 .build();
     }
 
+    @Cacheable(MENTORS_PUBLIC)
     public List<PublicMentorDTO> getPublicMentors() {
         return userRepository.findAllByRole(Role.MENTOR)
                 .stream()
@@ -287,7 +365,8 @@ public class MentorshipService {
                         .id(u.getId())
                         .name(u.getName())
                         .build()
-                ).toList();
+                ).collect(Collectors.toList());
     }
+
 
 }

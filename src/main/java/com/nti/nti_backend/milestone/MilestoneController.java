@@ -28,6 +28,7 @@ public class MilestoneController {
 
     private final MilestoneService milestoneService;
 
+    // POST /api/milestones
     @PostMapping
     @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneResponseDTO> create(
@@ -39,6 +40,7 @@ public class MilestoneController {
                 .body(created);
     }
 
+    // GET /api/milestones
     @GetMapping
     @PreAuthorize(READ_ROLES)
     public ResponseEntity<List<MilestoneResponseDTO>> findAll(
@@ -51,12 +53,22 @@ public class MilestoneController {
         );
     }
 
+    // GET /api/milestones/{id}
     @GetMapping("/{id}")
     @PreAuthorize(READ_ROLES)
     public ResponseEntity<MilestoneResponseDTO> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(milestoneService.findById(id));
     }
 
+    // DELETE /api/milestones/{id}
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<Void> deleteMilestone(@PathVariable UUID id) {
+        milestoneService.deleteMilestone(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // PUT /api/milestones/{id} - title, description, dueDate
     @PutMapping("/{id}")
     @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneResponseDTO> update(
@@ -66,6 +78,7 @@ public class MilestoneController {
         return ResponseEntity.ok(milestoneService.update(id, dto));
     }
 
+    // PATCH /api/milestones/{id}/status - status
     @PatchMapping("/{id}/status")
     @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneResponseDTO> changeStatus(
@@ -75,7 +88,7 @@ public class MilestoneController {
         return ResponseEntity.ok(milestoneService.changeStatus(id, dto));
     }
 
-    // Тільки адмін і ментор бачать чергу на затвердження
+    // GET /api/milestones/pending-approval
     @GetMapping("/pending-approval")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','MENTOR')")
     public ResponseEntity<List<MilestoneResponseDTO>> getPendingApproval() {
@@ -142,6 +155,7 @@ public class MilestoneController {
         return ResponseEntity.noContent().build();
     }
 
+    // GET /api/milestones/{id}/attachments/{attachmentId}/file?inline=true
     @GetMapping("/{id}/attachments/{attachmentId}/file")
     @PreAuthorize(READ_ROLES)
     public ResponseEntity<Resource> serveAttachment(

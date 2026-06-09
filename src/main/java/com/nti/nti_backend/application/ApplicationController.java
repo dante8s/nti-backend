@@ -206,7 +206,7 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
     }
 
     @GetMapping("/applications/by-call/{callId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'FIRM', 'FIRM_USER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FIRM')")
     public ResponseEntity<List<ApplicationDTO>> getByCall(
             @PathVariable Long callId
     ) {

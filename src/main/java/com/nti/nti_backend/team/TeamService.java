@@ -14,6 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
+import java.util.Set;
+import java.util.UUID;
 import java.util.Set;
 import java.util.UUID;
 
@@ -39,6 +45,10 @@ public class TeamService {
         this.emailService = emailService;
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = TEAM_FOR_USER, key = "#team.leader.id"),
+            @CacheEvict(value = ELIGIBLE_TEAMS, allEntries = true)
+    })
     public Team createTeam(Team team) {
         if (team.getLeader() == null || team.getLeader().getId() == null) {
             throw new IllegalStateException("Team leader is required");
@@ -90,6 +100,12 @@ public class TeamService {
                 .orElseThrow(() -> new IllegalStateException("Team not found: " + teamId));
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = TEAM, key = "#teamId"),
+            @CacheEvict(value = TEAM_INVITES, key = "#invitedUserId"),
+            @CacheEvict(value = TEAM_FOR_USER, key = "#invitedUserId"),
+            @CacheEvict(value = TEAM_FOR_USER, allEntries = true)
+    })
     public TeamMember inviteMember(Long teamId, Long invitedUserId) {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalStateException("Команду не знайдено"));
@@ -173,11 +189,21 @@ public class TeamService {
         invite.setInvitedAt(LocalDateTime.now());
         TeamMember saved = teamMemberRepository.save(invite);
 
-        emailService.sendTeamInviteToUnregistered(email, team.getName(), inviteToken);
+        //emailService.sendTeamInviteToUnregistered(email, team.getName(), inviteToken);
 
         return saved;
     }
 
+
+
+    @Caching(evict = {
+            @CacheEvict(value = TEAM, key = "#teamId"),
+            @CacheEvict(value = TEAM_FOR_USER, key = "#userId"),
+            @CacheEvict(value = TEAM_INVITES, key = "#userId"),
+            @CacheEvict(value = ELIGIBLE_TEAMS, allEntries = true),
+            @CacheEvict(value = TEAM_FOR_USER, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
+    })
     public TeamMember respondToInvitation(Long teamId, Long userId, boolean accepted) {
         TeamMember membership = teamMemberRepository.findByTeam_IdAndUser_Id(teamId, userId)
                 .orElseThrow(() -> new IllegalStateException("Запрошення не знайдено"));
@@ -230,6 +256,14 @@ public class TeamService {
      * Лідер скасовує запрошення (PENDING) або виключає учасника (ACCEPTED).
      * Статус REMOVED — для повідомлення на сторінці «Моя команда».
      */
+    @Caching(evict = {
+            @CacheEvict(value = TEAM, key = "#teamId"),
+            @CacheEvict(value = TEAM_FOR_USER, key = "#memberUserId"),
+            @CacheEvict(value = TEAM_INVITES, key = "#memberUserId"),
+            @CacheEvict(value = ELIGIBLE_TEAMS, allEntries = true),
+            @CacheEvict(value = TEAM_FOR_USER, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
+    })
     public void removeMember(Long teamId , Long memberUserId , Long requesterUserId , boolean admin) {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalStateException("Team not found"));
@@ -287,6 +321,12 @@ public class TeamService {
     }
 
 
+    @Caching(evict = {
+            @CacheEvict(value = TEAM, key = "#teamId"),
+            @CacheEvict(value = TEAM_FOR_USER, allEntries = true),
+            @CacheEvict(value = ELIGIBLE_TEAMS, allEntries = true),
+            @CacheEvict(value = APPLICATIONS_MY, allEntries = true)
+    })
     public void deleteTeam(Long teamId, Long requesterUserId, boolean admin) {
         Team team = teamRepository.findByIdWithMembers(teamId)
                 .orElseThrow(() -> new IllegalStateException("Команду не знайдено"));
@@ -303,4 +343,86 @@ public class TeamService {
         teamRepository.delete(team);
         teamRepository.flush();
     }
+
+
+    // methods to return DTOs
+    @Cacheable(value = TEAM, key = "#teamId")
+    @Transactional(readOnly = true)
+    public TeamResponse getTeamResponseById(Long teamId) {
+        Team team = getTeamWithMembers(teamId);
+        return toResponse(team);
+    }
+
+    @Cacheable(value = TEAM_FOR_USER, key = "#userId")
+    @Transactional(readOnly = true)
+    public TeamResponse getTeamResponseForUser(Long userId) {
+        Team team = getTeamForUser(userId);
+        return toResponse(team);
+    }
+
+    @Cacheable(value = TEAM_INVITES, key = "#userId")
+    @Transactional(readOnly = true)
+    public List<TeamMemberResponse> getPendingInviteResponsesForUser(Long userId) {
+        return getPendingInvitesForUser(userId)
+                .stream()
+                .map(this::toMemberResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Cacheable(value = ELIGIBLE_TEAMS)
+    @Transactional(readOnly = true)
+    public List<TeamResponse> getEligibleTeamResponses() {
+        return getEligibleTeams()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    // Move conversion logic from TeamController into TeamService
+    private TeamResponse toResponse(Team team) {
+        List<TeamMemberResponse> members = team.getMembers()
+                .stream()
+                .filter(m -> m.getInviteStatus() == TeamMember.InviteStatus.PENDING
+                        || m.getInviteStatus() == TeamMember.InviteStatus.ACCEPTED)
+                .map(this::toMemberResponse)
+                .collect(Collectors.toList());
+
+        return new TeamResponse(
+                team.getId(),
+                team.getName(),
+                team.getLeader().getId(),
+                team.getMaxCapacity(),
+                team.getDesciption(),
+                team.getCompetencies(),
+                members
+        );
+    }
+
+    public TeamMemberResponse toMemberResponse(TeamMember member) {
+        User user = member.getUser();
+        String displayName = "—";
+        String email = null;
+        if (user != null) {
+            email = user.getEmail();
+            String name = user.getName();
+            displayName = (name != null && !name.isBlank())
+                    ? name : "Користувач #" + user.getId();
+        }
+        String teamName = member.getTeam() != null
+                ? member.getTeam().getName() : null;
+
+        return new TeamMemberResponse(
+                member.getId(),
+                member.getTeam().getId(),
+                member.getUser().getId(),
+                member.getRole().name(),
+                member.getInviteStatus().name(),
+                displayName,
+                email,
+                teamName
+        );
+    }
+
+
+
 }

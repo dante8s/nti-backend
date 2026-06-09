@@ -95,7 +95,7 @@ public class CvUploadController {
     /** Current user id and roles from JWT. */
     @GetMapping("/me/session")
     @PreAuthorize(
-            "hasAnyRole('STUDENT','MENTOR','FIRM','FIRM_USER','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')"
+            "hasAnyRole('STUDENT','MENTOR','FIRM','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')"
     )
     public ResponseEntity<ProfileSessionBrief> getMySessionBrief(
             @AuthenticationPrincipal User authUser) {

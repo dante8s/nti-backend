@@ -12,6 +12,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
+import static com.nti.nti_backend.config.CacheNames.*;
+import org.springframework.cache.annotation.*;
 
 @Service
 @Transactional
@@ -25,16 +28,27 @@ public class StudentProfileService {
 
     private static final long MAX_AVATAR_BYTES = 10L * 1024 * 1024;
 
+    private static final List<String> DANGEROUS_SUFFIXES = List.of(
+            ".exe", ".bat", ".cmd", ".sh", ".dll", ".jar", ".php", ".html", ".htm"
+    );
+
+    private static final String[] IMAGE_SUFFIXES = {
+            ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff",
+            ".heic", ".heif", ".avif", ".ico", ".jfif", ".pjpeg", ".pjp", ".svg",
+    };
+
     public StudentProfileService(StudentProfileRepository studentProfileRepository) {
         this.studentProfileRepository = studentProfileRepository;
     }
 
+    @Cacheable(value = STUDENT_PROFILE, key = "#userId")
     @Transactional(readOnly = true)
     public StudentProfile getProfileById(Long userId) {
         return studentProfileRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new IllegalStateException("User not found by that id"));
     }
 
+    @CacheEvict(value = STUDENT_PROFILE, key = "#profile.user.id")
     public StudentProfile createStudentProfile(StudentProfile profile) {
         if (studentProfileRepository.existsByUser_Id(profile.getUser().getId())) {
             throw new IllegalStateException("Profile already exists for this user");
@@ -43,6 +57,7 @@ public class StudentProfileService {
         return studentProfileRepository.save(profile);
     }
 
+    @CacheEvict(value = STUDENT_PROFILE, key = "#userId")
     public StudentProfile editProfile(Long userId, StudentProfile updated) {
         StudentProfile existing = getProfileById(userId);
 
@@ -57,6 +72,7 @@ public class StudentProfileService {
         return studentProfileRepository.save(existing);
     }
 
+    @CacheEvict(value = STUDENT_PROFILE, key = "#userId")
     public StudentProfile clearCv(Long userId) {
         StudentProfile profile = getProfileById(userId);
         profile.setCvFilePath(null);
@@ -66,6 +82,7 @@ public class StudentProfileService {
         return studentProfileRepository.save(profile);
     }
 
+    @CacheEvict(value = STUDENT_PROFILE, key = "#userId")
     public StudentProfile uploadCv(Long userId, MultipartFile file) throws IOException {
         if (file.isEmpty()) {
             throw new IllegalStateException("Cannot upload an empty file");
@@ -98,6 +115,7 @@ public class StudentProfileService {
         return studentProfileRepository.save(profile);
     }
 
+    @CacheEvict(value = STUDENT_PROFILE, key = "#userId")
     public StudentProfile clearProfilePhoto(Long userId) {
         StudentProfile profile = getProfileById(userId);
         if (profile.getAvatarFilePath() != null) {
@@ -112,6 +130,7 @@ public class StudentProfileService {
         return studentProfileRepository.save(profile);
     }
 
+    @CacheEvict(value = STUDENT_PROFILE, key = "#userId")
     public StudentProfile uploadProfilePhoto(Long userId, MultipartFile file) throws IOException {
         if (file.isEmpty()) {
             throw new IllegalStateException("Cannot upload an empty file");
