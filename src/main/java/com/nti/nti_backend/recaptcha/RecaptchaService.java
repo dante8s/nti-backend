@@ -20,6 +20,11 @@ public class RecaptchaService {
     private final RestTemplate restTemplate;
 
     public boolean verify(String captchaToken) {
+        // Якщо секрет не налаштований — пропускаємо (локальна розробка)
+        if (secretKey == null || secretKey.isBlank()) {
+            return true;
+        }
+
         // Якщо токен порожній — одразу відхиляємо
         if (captchaToken == null
                 || captchaToken.isBlank()) {

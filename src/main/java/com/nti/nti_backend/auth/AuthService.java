@@ -283,6 +283,10 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
 
+        if (!user.isEmailVerified()) {
+            throw AppException.badRequest("Користувач ще не підтвердив email");
+        }
+
         user.setAccountStatus(AccountStatus.APPROVED);
         user.setEnabled(true);
         userRepository.save(user);
@@ -442,7 +446,7 @@ public class AuthService {
 
     public List<UserDTO> getPendingUsers() {
         return userRepository
-                .findByAccountStatus(AccountStatus.PENDING)
+                .findByAccountStatusAndEmailVerified(AccountStatus.PENDING, true)
                 .stream()
                 .map(this::toUserDTO)
                 .toList();
