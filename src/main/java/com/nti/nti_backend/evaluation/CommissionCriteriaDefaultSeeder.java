@@ -10,8 +10,8 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Якщо для виклику ще немає критеріїв у БД, створює стандартний набір для оцінювання комісії.
- * Узгоджено з шаблоном екрану (бали 1–100 та коментар).
+ * If there are no criteria for a call in the DB, creates a default set for commission evaluation.
+ * Aligned with the screen template (scores 1–100 and comment).
  */
 @Service
 public class CommissionCriteriaDefaultSeeder {
@@ -20,26 +20,26 @@ public class CommissionCriteriaDefaultSeeder {
 
     private static final List<DefaultCriterion> DEFAULT_SET = List.of(
             new DefaultCriterion(
-                    "Оригінальність ідеї",
-                    "Наскільки проєкт відрізняється від уже відомих рішень, свіжість "
-                            + "формулювання проблеми та підходів.",
+                    "Originality of the idea",
+                    "How much the project differs from existing solutions, the freshness "
+                            + "of the problem statement and approaches.",
                     25,
                     1),
             new DefaultCriterion(
-                    "Технічна реалізованість",
-                    "Реалістичність технічного плану, архітектури та дорожньої карти виконання.",
+                    "Technical feasibility",
+                    "Realism of the technical plan, architecture, and execution roadmap.",
                     25,
                     2),
             new DefaultCriterion(
-                    "Соціальний та ринковий вплив",
-                    "Користь для аудиторії, соціально-екологічний або економічний ефект, "
-                            + "потенціал масштабування.",
+                    "Social and market impact",
+                    "Benefit to the audience, social, environmental, or economic impact, "
+                            + "and scaling potential.",
                     25,
                     3),
             new DefaultCriterion(
-                    "Якість і повнота матеріалів",
-                    "Структурованість поданої документації: бюджет, аналіз ризиків, "
-                            + "монетизація та відповідність вимогам виклику.",
+                    "Quality and completeness of materials",
+                    "Structure of submitted documentation: budget, risk analysis, "
+                            + "monetization, and compliance with call requirements.",
                     25,
                     4)
     );
@@ -47,7 +47,7 @@ public class CommissionCriteriaDefaultSeeder {
     private final CriteriaRepository criteriaRepository;
     private final CallRepository callRepository;
 
-    /** Захист від подвійного створення під паралельними першими запитами. */
+    /** Protection against double creation under parallel initial requests. */
     private final ConcurrentHashMap<Long, Object> localLocks = new ConcurrentHashMap<>();
 
     public CommissionCriteriaDefaultSeeder(

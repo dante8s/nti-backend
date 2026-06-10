@@ -23,7 +23,7 @@ public class AuditEvent {
     @JoinColumn(name = "actor_id")
     private User actor;
 
-    // application_id ВИДАЛЕНО — використовуємо entityId
+    // application_id REMOVED — using entityId instead
     @Column(nullable = false)
     private String action;
 

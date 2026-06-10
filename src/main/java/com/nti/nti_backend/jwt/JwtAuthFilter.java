@@ -31,8 +31,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
 
-        // 🔓 1. Пропускаємо ТІЛЬКИ публічні маршрути
-        // Важливо: /api/auth/admin/** має проходити через JWT-фільтр
+        // 🔓 1. Pass through ONLY public routes
+        // Important: /api/auth/admin/** must go through the JWT filter
         if (path.startsWith("/api/public")
                 || path.equals("/api/auth/register")
                 || path.equals("/api/auth/login")
@@ -43,10 +43,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 2. Беремо Authorization header
+        // 2. Get Authorization header
         String header = request.getHeader("Authorization");
 
-        // Якщо токена немає — пропускаємо далі
+        // If there is no token — pass through
         if (header == null || !header.startsWith("Bearer ")) {
             chain.doFilter(request, response);
             return;
@@ -64,7 +64,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 4. Якщо email є і користувач ще не авторизований
+        // 4. If email exists and user is not yet authenticated
         if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
             UserDetails userDetails = userService.loadUserByUsername(email);

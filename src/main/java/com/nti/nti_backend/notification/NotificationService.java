@@ -31,25 +31,25 @@ public class NotificationService {
 
     public void notifyApplicationStatusChanged(User user, String status,
                                                String comment, Long applicationId) {
-        String title = "Статус заявки змінено";
-        String msg   = "Ваша заявка перейшла в статус: " + humanStatus(status)
-                + (comment != null && !comment.isBlank() ? "\nКоментар: " + comment : "");
+        String title = "Application status changed";
+        String msg   = "Your application status has changed to: " + humanStatus(status)
+                + (comment != null && !comment.isBlank() ? "\nComment: " + comment : "");
         create(user, NotificationType.APPLICATION_STATUS_CHANGED,
                 title, msg, "/app/applications/" + applicationId);
     }
 
     public void notifyMentorAssigned(User user, String mentorName, Long applicationId) {
         create(user, NotificationType.MENTOR_ASSIGNED,
-                "Ментор призначено",
-                "До вашого проєкту призначено ментора: " + mentorName,
+                "Mentor assigned",
+                "A mentor has been assigned to your project: " + mentorName,
                 "/app/applications/" + applicationId);
     }
 
     public void notifyMilestoneStatusChanged(User user, String milestoneTitle,
                                              String newStatus, String milestoneId) {
         create(user, NotificationType.MILESTONE_STATUS_CHANGED,
-                "Статус етапу змінено",
-                "Етап «" + milestoneTitle + "» перейшов у статус: " + newStatus,
+                "Milestone status changed",
+                "Milestone \"" + milestoneTitle + "\" has changed to status: " + newStatus,
                 "/app/applications");
     }
 
@@ -82,17 +82,17 @@ public class NotificationService {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static final Map<String, String> STATUS_LABELS = Map.ofEntries(
-            Map.entry("DRAFT",              "Чернетка"),
-            Map.entry("SUBMITTED",          "Подано"),
-            Map.entry("FORMALLY_VERIFIED",  "Офіційно підтверджено"),
-            Map.entry("IN_REVIEW",          "На оцінюванні"),
-            Map.entry("NEEDS_REVISION",     "Потрібні виправлення"),
-            Map.entry("APPROVED",           "Схвалено"),
-            Map.entry("REJECTED",           "Відхилено"),
-            Map.entry("ONBOARDING",         "Адаптація"),
-            Map.entry("ACTIVE",             "Активний проєкт"),
-            Map.entry("SUSPENDED",          "Відсторонено"),
-            Map.entry("ARCHIVED",           "Архівовано")
+            Map.entry("DRAFT",              "Draft"),
+            Map.entry("SUBMITTED",          "Submitted"),
+            Map.entry("FORMALLY_VERIFIED",  "Formally verified"),
+            Map.entry("IN_REVIEW",          "Under review"),
+            Map.entry("NEEDS_REVISION",     "Needs revision"),
+            Map.entry("APPROVED",           "Approved"),
+            Map.entry("REJECTED",           "Rejected"),
+            Map.entry("ONBOARDING",         "Onboarding"),
+            Map.entry("ACTIVE",             "Active project"),
+            Map.entry("SUSPENDED",          "Suspended"),
+            Map.entry("ARCHIVED",           "Archived")
     );
 
     private String humanStatus(String status) {

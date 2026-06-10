@@ -31,7 +31,7 @@ public class TeamController {
             @RequestBody CreateTeamRequest request) {
         if (!canActForUser(authUser, request.leaderId())) {
             return ResponseEntity.status(403)
-                    .body(Map.of("message", "Не можна створити команду від імені іншого користувача або без авторизації."));
+                    .body(Map.of("message", "Cannot create a team on behalf of another user or without authorization."));
         }
         try {
             Team team = new Team();
@@ -82,7 +82,7 @@ public class TeamController {
         }
     }
 
-    /** Вхідні запрошення поточного користувача (id з JWT, без помилок localStorage). */
+    /** Incoming invitations for the current user (id from JWT, without localStorage errors). */
     @GetMapping("/me/invites")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<TeamMemberResponse>> getMyPendingInvites(
@@ -136,7 +136,7 @@ public class TeamController {
                 return ResponseEntity.status(403).build();
             }
 
-            // Якщо вказано email і користувач не знайдений — запрошуємо незареєстрованого
+            // If email is provided and the user is not found — invite an unregistered user
             if (userId == null && email != null && !email.isBlank()) {
                 var existing = userRepository.findByEmail(email.trim().toLowerCase())
                         .or(() -> userRepository.findByEmail(email.trim()));
@@ -166,7 +166,7 @@ public class TeamController {
             Team team = teamService.getTeamWithMembers(teamId);
             if (!isAdmin(authUser) && !team.getLeader().getId().equals(authUser.getId())) {
                 return ResponseEntity.status(403)
-                        .body(Map.of("message", "Лише лідер команди може видалити команду."));
+                        .body(Map.of("message", "Only the team leader can delete the team."));
             }
             teamService.deleteTeam(teamId, authUser.getId(), isAdmin(authUser));
             return ResponseEntity.noContent().build();
@@ -219,10 +219,10 @@ public class TeamController {
             return userRepository.findByEmail(email.trim().toLowerCase())
                     .or(() -> userRepository.findByEmail(email.trim()))
                     .orElseThrow(() -> new IllegalStateException(
-                            "Користувача з email «" + email.trim() + "» не знайдено"))
+                            "User with email \"" + email.trim() + "\" not found"))
                     .getId();
         }
-        throw new IllegalStateException("Вкажіть ID користувача або email");
+        throw new IllegalStateException("Please provide a user ID or email");
     }
 
     public record CreateTeamRequest(

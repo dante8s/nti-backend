@@ -144,7 +144,7 @@ public class StudentProfileService {
             throw new IllegalStateException("File name is required");
         }
         if (!FileTypeValidator.isAllowedImage(file)) {
-            throw new IllegalStateException("Дозволено лише зображення формату JPEG, PNG або WebP");
+            throw new IllegalStateException("Only JPEG, PNG or WebP image formats are allowed");
         }
 
         StudentProfile profile = getProfileById(userId);

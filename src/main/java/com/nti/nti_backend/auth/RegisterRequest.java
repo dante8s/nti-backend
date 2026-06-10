@@ -9,23 +9,21 @@ import java.util.Set;
 
 public record RegisterRequest(
 
-        @NotBlank(message = "Ім'я обов'язкове")
+        @NotBlank(message = "Name is required")
         String name,
 
-        @Email(message = "Невірний формат email")
-        @NotBlank(message = "Email обов'язковий")
+        @Email(message = "Invalid email format")
+        @NotBlank(message = "Email is required")
         String email,
 
-        @Size(min = 6, message = "Мінімум 6 символів")
-        @NotBlank(message = "Пароль обов'язковий")
+        @Size(min = 6, message = "Minimum 6 characters")
+        @NotBlank(message = "Password is required")
         String password,
 
-        @NotEmpty(message = "Оберіть хоча б одну роль")
+        @NotEmpty(message = "Select at least one role")
         Set<String> roles,
 
         boolean gdprConsent,
 
-        // Токен від Google reCAPTCHA
-        @NotBlank(message = "Підтвердіть що ви не робот")
         String captchaToken
 ) {}

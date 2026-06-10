@@ -57,7 +57,7 @@ public class EvaluationService {
                     "Criteria does not belong to application's call");
         }
 
-        // Оцінювання в кабінеті комісії: шкала 1–100 (незалежно від max_score у критерії як довідкового поля).
+        // Commission evaluation: scale 1–100 (regardless of max_score in the criteria as a reference field).
         if (evaluation.getScore() < 1 || evaluation.getScore() > 100) {
             throw new IllegalStateException("The score must be between 1 and 100");
         }
@@ -73,7 +73,7 @@ public class EvaluationService {
                 .orElseGet(() -> evaluationRepository.save(evaluation));
 
         auditService.log(evaluation.getEvaluator(), "EVALUATION_SUBMITTED", "APPLICATION", appId,
-                "Оцінка " + evaluation.getScore() + "/100 за критерієм id=" + criteriaId);
+                "Score " + evaluation.getScore() + "/100 for criterion id=" + criteriaId);
         return saved;
     }
 

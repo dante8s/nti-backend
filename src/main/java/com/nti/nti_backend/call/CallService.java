@@ -22,7 +22,7 @@ public class CallService {
     private final ProgramRepository programRepository;
     private final AuditService auditService;
 
-    // Всі відкриті виклики по програмі
+    // All open calls for a program
     @Cacheable(value = CALLS_OPEN, key = "#programId")
     public List<CallDTO> getOpenByProgram(Long programId) {
         return callRepository
@@ -34,7 +34,7 @@ public class CallService {
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    // Всі відкриті виклики взагалі
+    // All open calls overall
     @Cacheable(value = CALLS_OPEN, key = "'all'")
     public List<CallDTO> getAllOpen() {
         return callRepository
@@ -44,17 +44,17 @@ public class CallService {
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    // Один виклик по id
+    // Single call by id
     @Cacheable(value = CALL, key = "#id")
     public CallDTO getById(Long id) {
         return callRepository.findById(id)
                 .map(this::toDTO)
                 .orElseThrow(() ->
-                        new RuntimeException("Виклик не знайдено")
+                        new RuntimeException("Call not found")
                 );
     }
 
-    // Створити виклик (ADMIN)
+    // Create call (ADMIN)
     @Caching(evict = {
             @CacheEvict(value = CALLS_OPEN, allEntries = true),
             @CacheEvict(value = CALLS_BY_PROGRAM, key = "#programId")
@@ -63,7 +63,7 @@ public class CallService {
     public CallDTO create(Long programId, CreateCallRequest request, User actor) {
         Program program = programRepository
                 .findById(programId)
-                .orElseThrow(() -> new RuntimeException("Програму не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Program not found"));
         Call call = Call.builder()
                 .title(request.title())
                 .program(program)
@@ -72,22 +72,22 @@ public class CallService {
                 .build();
         CallDTO result = toDTO(callRepository.save(call));
         auditService.log(actor, "CALL_CREATED", "CALL", result.id(),
-                "Створено виклик: \"" + request.title() + "\" у програмі id=" + programId);
+                "Call created: \"" + request.title() + "\" in program id=" + programId);
         return result;
     }
 
-    // Закрити виклик (ADMIN)
+    // Close call (ADMIN)
     @Caching(evict = {
             @CacheEvict(value = CALLS_OPEN, allEntries = true),
             @CacheEvict(value = CALL, key = "#id")
     })
     public void close(Long id, User actor) {
         Call call = callRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Виклик не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Call not found"));
         call.setStatus(CallStatus.CLOSED);
         callRepository.save(call);
         auditService.log(actor, "CALL_CLOSED", "CALL", id,
-                "Виклик закрито: \"" + call.getTitle() + "\"");
+                "Call closed: \"" + call.getTitle() + "\"");
     }
 
     // Get all calls for Program

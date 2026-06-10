@@ -18,7 +18,7 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // ── AppException — основний обробник бізнес-помилок ──────────────────────
+    // ── AppException — main handler for business errors ──────────────────────
     @ExceptionHandler(AppException.class)
     public ResponseEntity<Map<String, Object>> handleApp(AppException ex) {
         return buildError(ex.getStatus(), ex.getMessage());
@@ -27,20 +27,20 @@ public class GlobalExceptionHandler {
     // ── Spring Security ───────────────────────────────────────────────────────
     @ExceptionHandler(DisabledException.class)
     public ResponseEntity<Map<String, Object>> handleDisabled(DisabledException ex) {
-        return buildError(HttpStatus.FORBIDDEN, "Акаунт очікує схвалення адміністратора");
+        return buildError(HttpStatus.FORBIDDEN, "Account is awaiting administrator approval");
     }
 
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex) {
-        return buildError(HttpStatus.UNAUTHORIZED, "Невірний email або пароль");
+        return buildError(HttpStatus.UNAUTHORIZED, "Invalid email or password");
     }
 
     @ExceptionHandler(LockedException.class)
     public ResponseEntity<Map<String, Object>> handleLocked(LockedException ex) {
-        return buildError(HttpStatus.FORBIDDEN, "Акаунт заблоковано. Зверніться до адміністратора.");
+        return buildError(HttpStatus.FORBIDDEN, "Account is suspended. Please contact the administrator.");
     }
 
-    // ── Валідація полів (@Valid) ───────────────────────────────────────────────
+    // ── Field validation (@Valid) ─────────────────────────────────────────────
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new HashMap<>();
@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
-    // ── Fallback для непередбачених RuntimeException ─────────────────────────
+    // ── Fallback for unexpected RuntimeException ──────────────────────────────
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException ex) {
         return buildError(HttpStatus.BAD_REQUEST, ex.getMessage());

@@ -45,7 +45,7 @@ public interface ApplicationRepository
 
     // boolean existsByApplicantIdAndCallId(Long applicantId, Long callId);
 
-    // Знайти конкретну заявку студента для виклику
+    // Find a specific student application for a call
     Optional<Application> findByApplicantIdAndCallId(Long applicantId, Long callId);
 
     long countByStatus(ApplicationStatus status);

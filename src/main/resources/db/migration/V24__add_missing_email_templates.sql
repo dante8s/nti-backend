@@ -2,32 +2,32 @@ INSERT INTO email_templates (type, subject, body, variables)
 VALUES
 (
     'COMPLETION_REJECTED',
-    'NTI — Запит на завершення проекту відхилено',
-    'Вітаємо, {{name}}!
+    'NTI — Project completion request rejected',
+    'Hello, {{name}}!
 
-Адміністратор відхилив ваш запит на завершення проекту «{{projectName}}».
+The administrator has rejected your request to complete the project "{{projectName}}".
 
-Проект залишається активним. Якщо у вас є питання — зверніться до адміністратора.
+The project remains active. If you have any questions, please contact the administrator.
 
-Команда NTI',
+NTI Team',
     'name,projectName'
 ),
 (
     'TEAM_INVITE_UNREGISTERED',
-    'NTI — Запрошення до команди «{{teamName}}»',
-    'Вітаємо!
+    'NTI — Invitation to team "{{teamName}}"',
+    'Hello!
 
-Вас запрошують до команди «{{teamName}}» на платформі NTI.
+You have been invited to join the team "{{teamName}}" on the NTI platform.
 
-Для того щоб прийняти участь, перейдіть за посиланням:
+To participate, follow the link:
 
 {{link}}
 
-Вам потрібно буде вказати ваше ім''я та пароль.
-Після реєстрації ви зможете прийняти або відхилити запрошення в особистому кабінеті.
+You will need to provide your name and password.
+After registration you will be able to accept or decline the invitation in your personal account.
 
-Посилання дійсне 7 днів.
+The link is valid for 7 days.
 
-Команда NTI',
+NTI Team',
     'teamName,link'
 );

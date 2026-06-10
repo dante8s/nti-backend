@@ -44,7 +44,7 @@ public class ProgramController {
         );
     }
 
-    // Тільки ADMIN
+    // ADMIN only
     @PostMapping("/api/admin/programs")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ProgramDTO> create(
@@ -52,7 +52,7 @@ public class ProgramController {
             @AuthenticationPrincipal User actor) {
         ProgramDTO result = programService.create(dto);
         auditService.log(actor, "PROGRAM_CREATED", "PROGRAM", result.id(),
-                "Створено програму: \"" + dto.name() + "\"");
+                "Program created: \"" + dto.name() + "\"");
         return ResponseEntity.ok(result);
     }
 
@@ -119,7 +119,7 @@ public class ProgramController {
             @AuthenticationPrincipal User actor) {
         ProgramDTO result = programService.review(id, dto);
         auditService.log(actor, "PROGRAM_REVIEWED", "PROGRAM", id,
-                "Рішення по програмі: " + dto.status());
+                "Program review decision: " + dto.status());
         return ResponseEntity.ok(result);
     }
 
@@ -129,7 +129,7 @@ public class ProgramController {
             @PathVariable Long id,
             @AuthenticationPrincipal User actor) {
         programService.deactivate(id);
-        auditService.log(actor, "PROGRAM_DEACTIVATED", "PROGRAM", id, "Програму деактивовано");
+        auditService.log(actor, "PROGRAM_DEACTIVATED", "PROGRAM", id, "Program deactivated");
         return ResponseEntity.noContent().build();
     }
 

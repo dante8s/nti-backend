@@ -34,7 +34,7 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String password;
 
-    // Кілька ролей — зберігаються в окремій таблиці user_roles
+    // Multiple roles — stored in a separate user_roles table
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING)
     @CollectionTable(
@@ -45,7 +45,7 @@ public class User implements UserDetails {
     @Builder.Default
     private Set<Role> roles = new HashSet<>();
 
-    // Email підтвердження
+    // Email verification
     @Builder.Default
     private boolean emailVerified = false;
     private String verificationToken;
@@ -53,19 +53,19 @@ public class User implements UserDetails {
     // Invite token for mentor
     private String inviteToken;
 
-    // Скидання пароля
+    // Password reset
     private String resetPasswordToken;
     private LocalDateTime resetTokenExpiry;
 
-    // Онбординг
+    // Onboarding
     @Builder.Default
     private boolean onboardingCompleted = false;
 
-    // ВАЖЛИВО: enabled = false до схвалення адміном
+    // IMPORTANT: enabled = false until approved by admin
     @Builder.Default
     private boolean enabled = false;
 
-    // Статус схвалення адміном
+    // Admin approval status
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private AccountStatus accountStatus = AccountStatus.PENDING;
@@ -87,7 +87,7 @@ public class User implements UserDetails {
                 .collect(Collectors.toList());
     }
 
-    // Зручний метод — перевірити чи має роль
+    // Convenience method — check if user has a role
     public boolean hasRole(Role role) {
         return roles.contains(role);
     }

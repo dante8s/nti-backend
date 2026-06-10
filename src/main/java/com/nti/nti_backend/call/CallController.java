@@ -16,7 +16,7 @@ public class CallController {
 
     private final CallService callService;
 
-    // Публічні
+    // Public
     @GetMapping("/api/public/calls")
     public ResponseEntity<List<CallDTO>> getAllOpen() {
         return ResponseEntity.ok(
@@ -40,7 +40,7 @@ public class CallController {
         );
     }
 
-    // Тільки ADMIN
+    // ADMIN only
     @PostMapping("/api/admin/programs/{programId}/calls")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<CallDTO> create(

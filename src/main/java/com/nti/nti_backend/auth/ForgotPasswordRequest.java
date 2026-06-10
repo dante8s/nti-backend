@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public record ForgotPasswordRequest(
 
-        @Email(message = "Невірний формат email")
-        @NotBlank(message = "Email обов'язковий")
+        @Email(message = "Invalid email format")
+        @NotBlank(message = "Email is required")
         String email
 ) {}

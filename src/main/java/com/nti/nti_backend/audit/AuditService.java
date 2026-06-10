@@ -12,7 +12,7 @@ public class AuditService {
 
     private final AuditRepository auditRepository;
 
-    // Записати подію
+    // Record an event
     public void log(
             User actor,
             String action,
@@ -29,7 +29,7 @@ public class AuditService {
         auditRepository.save(event);
     }
 
-    // Отримати всі події для конкретної заявки
+    // Get all events for a specific application
     public List<AuditEventDTO> getForApplication(Long applicationId) {
         return auditRepository
                 .findByEntityTypeAndEntityIdOrderByCreatedAtAsc("APPLICATION", applicationId)
@@ -38,7 +38,7 @@ public class AuditService {
                 .toList();
     }
 
-    // Усі події з необов'язковими фільтрами (для адмін-журналу)
+    // All events with optional filters (for admin audit log)
     public List<AuditEventDTO> getAll(String entityType, String action) {
         boolean noFilter = (entityType == null || entityType.isBlank())
                         && (action == null || action.isBlank());
@@ -56,7 +56,7 @@ public class AuditService {
         return new AuditEventDTO(
                 e.getId(),
                 e.getActor() != null
-                        ? e.getActor().getName() : "Система",
+                        ? e.getActor().getName() : "System",
                 e.getAction(),
                 e.getDescription(),
                 e.getCreatedAt()

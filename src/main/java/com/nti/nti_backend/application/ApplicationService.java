@@ -46,7 +46,7 @@ import com.nti.nti_backend.exception.AppException;
 @RequiredArgsConstructor
 public class ApplicationService {
 
-    /** Віддача файлу документа заявки (перегляд / завантаження). */
+    /** Serve an application document file (view / download). */
     public record ServedApplicationDocument(
             Resource resource,
             MediaType contentType,
@@ -66,7 +66,7 @@ public class ApplicationService {
     private final NotificationService notificationService;
     private final ProjectReportService projectReportService;
   
-    // Від main: повніша state machine з усіма статусами
+    // Full state machine with all statuses
     private static final Map<ApplicationStatus, List<ApplicationStatus>> ALLOWED = Map.ofEntries(
             Map.entry(ApplicationStatus.DRAFT,
                     List.of(ApplicationStatus.SUBMITTED)),
@@ -94,7 +94,7 @@ public class ApplicationService {
                             ApplicationStatus.COMPLETION_PO_APPROVED))
     );
 
-    // Створити draft
+    // Create draft
     @CacheEvict(value = APPLICATIONS_MY, key = "#applicant.id")
     public ApplicationDTO createDraft(User applicant, CreateApplicationRequest request) {
         Optional<Application> existing =
@@ -105,18 +105,18 @@ public class ApplicationService {
 
         assertApplicantIsTeamLeader(applicant);
 
-        // Від Max: команда не може мати більше одного активного проекту
+        // A team cannot have more than one active project
         if (appRepository.existsApprovedByApplicantId(applicant.getId())) {
             throw new IllegalStateException(
-                    "Команда вже має активний проект. Завершіть поточний проект перш ніж подавати нову заявку.");
+                    "The team already has an active project. Complete the current project before submitting a new application.");
         }
 
         Call call = callRepository.findById(request.callId())
-                .orElseThrow(() -> AppException.notFound("Виклик не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Call not found"));
 
-        // Від main: перевірка дедлайну
+        // Check deadline
         if (call.getDeadline() != null && LocalDateTime.now().isAfter(call.getDeadline())) {
-            throw AppException.badRequest("Термін подачі заявок для цього виклику закінчився");
+            throw AppException.badRequest("The submission deadline for this call has passed");
         }
 
         Application app = Application.builder()
@@ -128,12 +128,12 @@ public class ApplicationService {
         Application saved = appRepository.save(app);
 
         auditService.log(applicant, "APPLICATION_CREATED", "APPLICATION", saved.getId(),
-                "Створено чернетку заявки");
+                "Application draft created");
 
         return toDTO(saved);
     }
 
-    // Оновити дані форми (тільки DRAFT або NEEDS_REVISION)
+    // Update form data (DRAFT or NEEDS_REVISION only)
     @CacheEvict(value = APPLICATIONS_MY, key = "#userId")
     public ApplicationDTO updateDraft(Long appId, Long userId, UpdateApplicationRequest request) {
         Application app = findAndCheckOwner(appId, userId);
@@ -141,24 +141,24 @@ public class ApplicationService {
         if (app.getStatus() != ApplicationStatus.DRAFT
                 && app.getStatus() != ApplicationStatus.NEEDS_REVISION) {
             throw AppException.badRequest(
-                    "Редагування доступне тільки для чернеток або заявок що потребують правок");
+                    "Editing is only available for drafts or applications requiring revision");
         }
 
         app.setFormData(request.formData());
         Application saved = appRepository.save(app);
 
         auditService.log(app.getApplicant(), "APPLICATION_UPDATED", "APPLICATION", appId,
-                "Оновлено дані заявки");
+                "Application data updated");
 
         return toDTO(saved);
     }
 
-    // Знайти мою заявку для виклику
+    // Find my application for a call
     public Optional<ApplicationDTO> getMyByCall(Long userId, Long callId) {
         return appRepository.findByApplicantIdAndCallId(userId, callId).map(this::toDTO);
     }
 
-    // Відправити заявку
+    // Submit application
     @Caching(evict = {
             @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
             @CacheEvict(value = APPLICATIONS_ALL, allEntries = true)
@@ -171,13 +171,13 @@ public class ApplicationService {
         assertApplicantIsTeamLeader(app.getApplicant());
         assertTeamIsFullyAssembled(app.getApplicant());
 
-        // Від main: перевірка дедлайну
+        // Check deadline
         Call call = app.getCall();
         if (call.getDeadline() != null && LocalDateTime.now().isAfter(call.getDeadline())) {
-            throw AppException.badRequest("Термін подачі заявок для цього виклику закінчився");
+            throw AppException.badRequest("The submission deadline for this call has passed");
         }
 
-        // Від Max: не можна відправити якщо команда вже має активний проект
+        // Cannot submit if the team already has an active project
         boolean hasOtherActiveProject = appRepository
                 .existsByApplicantIdAndStatusInAndIdNot(
                         app.getApplicant().getId(),
@@ -186,7 +186,7 @@ public class ApplicationService {
                 );
         if (hasOtherActiveProject) {
             throw new IllegalStateException(
-                    "Команда вже має активний проект. Завершіть поточний проект перш ніж подавати нову заявку.");
+                    "The team already has an active project. Complete the current project before submitting a new application.");
         }
 
         validateTransition(app.getStatus(), ApplicationStatus.SUBMITTED);
@@ -205,13 +205,13 @@ public class ApplicationService {
                 .toList();
 
         if (!missing.isEmpty()) {
-            throw AppException.badRequest("Не вистачає документів: " + String.join(", ", missing));
+            throw AppException.badRequest("Missing documents: " + String.join(", ", missing));
         }
 
         app.setStatus(ApplicationStatus.SUBMITTED);
         Application saved = appRepository.save(app);
 
-        // Від Max: зберігаємо снапшот складу команди на момент подачі
+        // Save snapshot of the team composition at the time of submission
         List<com.nti.nti_backend.teamMember.TeamMember> members =
                 teamMemberRepository.findAcceptedMembersByTeamLeader(app.getApplicant().getId());
         for (com.nti.nti_backend.teamMember.TeamMember m : members) {
@@ -225,7 +225,7 @@ public class ApplicationService {
         }
 
         auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
-                "Заявку відправлено на розгляд");
+                "Application submitted for review");
 
         try {
             emailService.sendApplicationStatusChanged(
@@ -238,7 +238,7 @@ public class ApplicationService {
         return toDTO(saved);
     }
 
-    // Завантажити документ
+    // Upload document
     public DocumentDTO saveDocument(Long appId, Long userId,
             String fileName, String filePath, String fileType, DocumentType documentType) {
 
@@ -251,8 +251,8 @@ public class ApplicationService {
                 || (isResultDoc && app.getStatus() == ApplicationStatus.APPROVED);
         if (!canUpload) {
             throw new RuntimeException(
-                    "Не можна змінювати документи "
-                            + "після відправки заявки"
+                    "Documents cannot be changed "
+                            + "after the application has been submitted"
             );
         }
 
@@ -270,17 +270,17 @@ public class ApplicationService {
         ApplicationDocument saved = documentRepository.save(doc);
 
         auditService.log(app.getApplicant(), "DOCUMENT_UPLOADED", "APPLICATION", appId,
-                "Завантажено: " + fileName);
+                "Uploaded: " + fileName);
 
         return toDocumentDTO(saved);
     }
 
-    // Статус документів
+    // Document status
     public List<DocumentStatusDTO> getDocumentStatus(Long appId, User viewer) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Application not found"));
         if (viewer == null || !canViewApplication(viewer, app)) {
-            throw AppException.forbidden("Немає доступу");
+            throw AppException.forbidden("Access denied");
         }
 
         ProgramType programType = app.getCall().getProgram().getType();
@@ -307,10 +307,10 @@ public class ApplicationService {
                         .toList()
         );
 
-        // Завжди додаємо статус результатних документів (для завершення проекту)
+        // Always add result document status (for project completion)
         for (DocumentType resultType : List.of(DocumentType.RESULT_1, DocumentType.RESULT_2)) {
             String label = resultType == DocumentType.RESULT_1
-                    ? "Результатний документ 1" : "Результатний документ 2";
+                    ? "Result document 1" : "Result document 2";
             result.add(new DocumentStatusDTO(
                     resultType.name(),
                     label,
@@ -329,35 +329,35 @@ public class ApplicationService {
     }
 
     /**
-     * Файл обов'язкового документа для перегляду/завантаження (з диска).
+     * Serve a required document file for viewing/downloading (from disk).
      */
     public ServedApplicationDocument serveApplicationDocument(
             Long applicationId, DocumentType documentType, User viewer) {
 
         Application app = appRepository.findById(applicationId)
-                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Application not found"));
         if (viewer == null || !canViewApplication(viewer, app)) {
-            throw AppException.forbidden("Немає доступу");
+            throw AppException.forbidden("Access denied");
         }
         ApplicationDocument doc = documentRepository
                 .findByApplicationIdAndDocumentType(applicationId, documentType)
-                .orElseThrow(() -> AppException.notFound("Документ не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Document not found"));
 
         Path path = Paths.get(doc.getFilePath()).normalize();
         if (!Files.exists(path) || !Files.isRegularFile(path)) {
-            throw AppException.notFound("Файл на диску не знайдено");
+            throw AppException.notFound("File not found on disk");
         }
         try {
             Resource resource = new UrlResource(path.toUri());
             if (!resource.exists() || !resource.isReadable()) {
-                throw AppException.serverError("Файл недоступний для читання");
+                throw AppException.serverError("File is not readable");
             }
             MediaType ct = resolveDocumentMediaType(doc);
             String name = doc.getFileName() != null ? doc.getFileName()
                     : documentType.name().toLowerCase() + "." + extensionFor(doc.getFileType());
             return new ServedApplicationDocument(resource, ct, name);
         } catch (MalformedURLException e) {
-            throw AppException.serverError("Некоректний шлях до файлу", e);
+            throw AppException.serverError("Invalid file path", e);
         }
     }
 
@@ -400,23 +400,23 @@ public class ApplicationService {
                 .orElseGet(ArrayList::new);
     }
 
-    // Одна заявка
+    // Single application
     @Transactional
     public ApplicationDTO getById(Long id) {
         return toDTO(appRepository.findById(id)
-                .orElseThrow(() -> AppException.notFound("Заявку не знайдено")));
+                .orElseThrow(() -> AppException.notFound("Application not found")));
     }
 
-    // Всі заявки (ADMIN)
+    // All applications (ADMIN)
     @Transactional
     /**
-     * Перегляд заявки з перевіркою прав: студент — лише своя; комісія та адмін — будь-яка.
+     * View application with access check: student — only their own; commission and admin — any.
      */
     public ApplicationDTO getByIdForViewer(Long id, User viewer) {
         Application app = appRepository.findById(id)
-                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Application not found"));
         if (viewer == null || !canViewApplication(viewer, app)) {
-            throw AppException.forbidden("Немає доступу");
+            throw AppException.forbidden("Access denied");
         }
         return toDTO(app);
     }
@@ -457,7 +457,7 @@ public class ApplicationService {
         return false;
     }
 
-    // Тільки не-чернетки для адміна
+    // Non-drafts only, for admin
     @Cacheable(value = APPLICATIONS_ALL)
     public List<ApplicationDTO> getAll() {
         return appRepository.findAll()
@@ -481,7 +481,7 @@ public class ApplicationService {
             User admin) {
 
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Application not found"));
 
         ApplicationStatus old = app.getStatus();
         validateTransition(old, newStatus);
@@ -495,8 +495,8 @@ public class ApplicationService {
                 "STATUS_CHANGED",
                 "APPLICATION",
                 appId,
-                "Статус: " + old + " → " + newStatus
-                        + (comment != null ? ". Коментар: " + comment : ""));
+                "Status: " + old + " → " + newStatus
+                        + (comment != null ? ". Comment: " + comment : ""));
 
         notificationService.notifyApplicationStatusChanged(
                 app.getApplicant(), newStatus.name(), comment, appId);
@@ -550,7 +550,7 @@ public class ApplicationService {
         return appRepository.findByCallId(callId).stream().map(this::toDTO).collect(Collectors.toCollection(ArrayList::new));
     }
 
-    /** Лідер надсилає запит на завершення проекту */
+    /** Leader sends a project completion request */
     @Caching(evict = {
             @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
             @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
@@ -558,17 +558,17 @@ public class ApplicationService {
     })
     public ApplicationDTO completeProject(Long appId, Long userId, boolean isAdmin) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Application not found"));
 
         if (!isAdmin) {
             boolean isLeader = teamRepository.findByLeader_Id(userId)
                     .map(team -> app.getApplicant().getId().equals(userId))
                     .orElse(false);
             if (!isLeader) {
-                throw new RuntimeException("Тільки лідер команди може надіслати запит на завершення");
+                throw new RuntimeException("Only the team leader can send a completion request");
             }
 
-            // Перевірка завантаження обох результатних документів
+            // Check that both result documents are uploaded
             List<ApplicationDocument> uploaded = documentRepository.findByApplicationId(appId);
             boolean hasResult1 = uploaded.stream()
                     .anyMatch(d -> d.getDocumentType() == DocumentType.RESULT_1);
@@ -576,55 +576,55 @@ public class ApplicationService {
                     .anyMatch(d -> d.getDocumentType() == DocumentType.RESULT_2);
             if (!hasResult1 || !hasResult2) {
                 throw new RuntimeException(
-                        "Для завершення проекту необхідно завантажити обидва результатних документи");
+                        "Both result documents must be uploaded to complete the project");
             }
 
             validateTransition(app.getStatus(), ApplicationStatus.COMPLETION_REQUESTED);
             app.setStatus(ApplicationStatus.COMPLETION_REQUESTED);
             Application saved = appRepository.save(app);
             auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
-                    "Лідер надіслав запит на завершення проекту");
+                    "Leader sent a project completion request");
             return toDTO(saved);
         }
 
-        // Адмін — одразу завершує
+        // Admin — completes immediately
         validateTransition(app.getStatus(), ApplicationStatus.COMPLETED);
         app.setStatus(ApplicationStatus.COMPLETED);
         Application saved = appRepository.save(app);
         auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
-                "Проект завершено адміном");
+                "Project completed by admin");
         return toDTO(saved);
     }
 
-    /** Адмін підтверджує завершення */
+    /** Admin confirms completion */
     @Caching(evict = {
             @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
             @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
             @CacheEvict(value = APPLICATIONS_CALL, allEntries = true)
     })
-    /** Адмін підтверджує завершення.
-     *  Program A: очікує COMPLETION_REQUESTED.
-     *  Program B: очікує COMPLETION_PO_APPROVED. */
+    /** Admin confirms completion.
+     *  Program A: expects COMPLETION_REQUESTED.
+     *  Program B: expects COMPLETION_PO_APPROVED. */
     public ApplicationDTO approveCompletion(Long appId) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Application not found"));
         boolean isProgramB = app.getCall().getProgram().getType() == ProgramType.PROGRAM_B;
         ApplicationStatus expectedStatus = isProgramB
                 ? ApplicationStatus.COMPLETION_PO_APPROVED
                 : ApplicationStatus.COMPLETION_REQUESTED;
         if (app.getStatus() != expectedStatus) {
-            throw new RuntimeException("Заявка не перебуває у потрібному статусі для підтвердження");
+            throw new RuntimeException("Application is not in the required status for approval");
         }
         validateTransition(app.getStatus(), ApplicationStatus.COMPLETED);
         app.setStatus(ApplicationStatus.COMPLETED);
         Application saved = appRepository.save(app);
         auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
-                "Адмін підтвердив завершення проекту");
+                "Admin confirmed project completion");
         projectReportService.createReport(saved);
         return toDTO(saved);
     }
 
-    /** Адмін відхиляє запит на завершення — повертає APPROVED, повідомляє лідера */
+    /** Admin rejects the completion request — reverts to APPROVED, notifies the leader */
     @Caching(evict = {
             @CacheEvict(value = APPLICATIONS_MY, allEntries = true),
             @CacheEvict(value = APPLICATIONS_ALL, allEntries = true),
@@ -632,19 +632,19 @@ public class ApplicationService {
     })
     public ApplicationDTO rejectCompletion(Long appId) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Application not found"));
         boolean isProgramB = app.getCall().getProgram().getType() == ProgramType.PROGRAM_B;
         ApplicationStatus expectedStatus = isProgramB
                 ? ApplicationStatus.COMPLETION_PO_APPROVED
                 : ApplicationStatus.COMPLETION_REQUESTED;
         if (app.getStatus() != expectedStatus) {
-            throw new RuntimeException("Заявка не перебуває у потрібному статусі для відхилення");
+            throw new RuntimeException("Application is not in the required status for rejection");
         }
         validateTransition(app.getStatus(), ApplicationStatus.APPROVED);
         app.setStatus(ApplicationStatus.APPROVED);
         Application saved = appRepository.save(app);
         auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
-                "Адмін відхилив запит на завершення проекту");
+                "Admin rejected the project completion request");
         try {
             emailService.sendCompletionRejected(
                     app.getApplicant().getEmail(),
@@ -655,9 +655,9 @@ public class ApplicationService {
         return toDTO(saved);
     }
 
-    /** Список заявок для адміна:
-     *  Program A зі статусом COMPLETION_REQUESTED +
-     *  Program B зі статусом COMPLETION_PO_APPROVED */
+    /** List of applications for admin:
+     *  Program A with COMPLETION_REQUESTED status +
+     *  Program B with COMPLETION_PO_APPROVED status */
     @Transactional(readOnly = true)
     public List<ApplicationDTO> getCompletionRequests() {
         List<Application> programA = appRepository.findByStatus(ApplicationStatus.COMPLETION_REQUESTED)
@@ -673,47 +673,47 @@ public class ApplicationService {
                 .toList();
     }
 
-    /** Product Owner підтверджує завершення Program B:
+    /** Product Owner confirms completion for Program B:
      *  COMPLETION_REQUESTED → COMPLETION_PO_APPROVED */
     public ApplicationDTO approveCompletionPO(Long appId, Long userId) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Application not found"));
         if (app.getCall().getProgram().getType() != ProgramType.PROGRAM_B) {
-            throw new RuntimeException("Підтвердження PO доступне тільки для Програми B");
+            throw new RuntimeException("PO approval is only available for Program B");
         }
         if (app.getProductOwner() == null || !app.getProductOwner().getId().equals(userId)) {
-            throw new RuntimeException("Тільки призначений Product Owner може підтвердити завершення");
+            throw new RuntimeException("Only the assigned Product Owner can confirm completion");
         }
         if (app.getStatus() != ApplicationStatus.COMPLETION_REQUESTED) {
-            throw new RuntimeException("Заявка не перебуває у статусі запиту на завершення");
+            throw new RuntimeException("Application is not in completion request status");
         }
         validateTransition(app.getStatus(), ApplicationStatus.COMPLETION_PO_APPROVED);
         app.setStatus(ApplicationStatus.COMPLETION_PO_APPROVED);
         Application saved = appRepository.save(app);
         auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
-                "Product Owner підтвердив завершення проекту");
+                "Product Owner confirmed project completion");
         return toDTO(saved);
     }
 
-    /** Product Owner відхиляє завершення Program B:
+    /** Product Owner rejects completion for Program B:
      *  COMPLETION_REQUESTED → APPROVED */
     public ApplicationDTO rejectCompletionPO(Long appId, Long userId) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Application not found"));
         if (app.getCall().getProgram().getType() != ProgramType.PROGRAM_B) {
-            throw new RuntimeException("Відхилення PO доступне тільки для Програми B");
+            throw new RuntimeException("PO rejection is only available for Program B");
         }
         if (app.getProductOwner() == null || !app.getProductOwner().getId().equals(userId)) {
-            throw new RuntimeException("Тільки призначений Product Owner може відхилити завершення");
+            throw new RuntimeException("Only the assigned Product Owner can reject completion");
         }
         if (app.getStatus() != ApplicationStatus.COMPLETION_REQUESTED) {
-            throw new RuntimeException("Заявка не перебуває у статусі запиту на завершення");
+            throw new RuntimeException("Application is not in completion request status");
         }
         validateTransition(app.getStatus(), ApplicationStatus.APPROVED);
         app.setStatus(ApplicationStatus.APPROVED);
         Application saved = appRepository.save(app);
         auditService.log(app.getApplicant(), "STATUS_CHANGED", "APPLICATION", appId,
-                "Product Owner відхилив запит на завершення проекту");
+                "Product Owner rejected the project completion request");
         try {
             emailService.sendCompletionRejected(
                     app.getApplicant().getEmail(),
@@ -724,7 +724,7 @@ public class ApplicationService {
         return toDTO(saved);
     }
 
-    /** Список заявок Program B у статусі COMPLETION_REQUESTED для Product Owner */
+    /** List of Program B applications with COMPLETION_REQUESTED status for Product Owner */
     @Transactional(readOnly = true)
     public List<ApplicationDTO> getPOCompletionRequests(Long userId) {
         return appRepository.findByStatus(ApplicationStatus.COMPLETION_REQUESTED)
@@ -735,7 +735,7 @@ public class ApplicationService {
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    /** Всі юзери для призначення Product Owner (доступно ADMIN і SUPER_ADMIN) */
+    /** All users for Product Owner assignment (accessible to ADMIN and SUPER_ADMIN) */
     @Transactional(readOnly = true)
     public List<com.nti.nti_backend.user.UserDTO> getAllUsersForPO() {
         return userRepository.findAll().stream()
@@ -751,7 +751,7 @@ public class ApplicationService {
                 .toList();
     }
 
-    /** Проекти користувача: активний (APPROVED) та завершені (COMPLETED) */
+    /** User's projects: active (APPROVED) and completed (COMPLETED) */
     @Transactional(readOnly = true)
     public ProjectHistoryDTO getMyProjects(Long userId) {
         Set<Long> allIds = new java.util.HashSet<>();
@@ -825,15 +825,15 @@ public class ApplicationService {
     private void validateTransition(ApplicationStatus current, ApplicationStatus next) {
         List<ApplicationStatus> allowed = ALLOWED.getOrDefault(current, List.of());
         if (!allowed.contains(next)) {
-            throw AppException.badRequest("Недозволений перехід: " + current + " → " + next);
+            throw AppException.badRequest("Invalid transition: " + current + " → " + next);
         }
     }
 
     private Application findAndCheckOwner(Long appId, Long userId) {
         Application app = appRepository.findById(appId)
-                .orElseThrow(() -> AppException.notFound("Заявку не знайдено"));
+                .orElseThrow(() -> AppException.notFound("Application not found"));
         if (!app.getApplicant().getId().equals(userId)) {
-            throw AppException.forbidden("Немає доступу");
+            throw AppException.forbidden("Access denied");
         }
         return app;
     }
@@ -901,23 +901,23 @@ public class ApplicationService {
         );
     }
 
-    /** Заявку на виклик подає лідер команди (applicant_id = leader). */
+    /** Only the team leader can submit an application (applicant_id = leader). */
     private void assertApplicantIsTeamLeader(User applicant) {
         if (applicant.hasRole(Role.SUPER_ADMIN)) return;
         if (!teamRepository.findByLeader_Id(applicant.getId()).isPresent()) {
-            throw AppException.badRequest("Подавати заявку на виклик може лише лідер команди");
+            throw AppException.badRequest("Only the team leader can submit a call application");
         }
     }
 
-    /** Команда повністю укомплектована (кількість ACCEPTED == maxCapacity). */
+    /** Team is fully assembled (number of ACCEPTED members == maxCapacity). */
     private void assertTeamIsFullyAssembled(User applicant) {
         if (applicant.hasRole(Role.SUPER_ADMIN)) return;
         teamRepository.findByLeader_Id(applicant.getId()).ifPresent(team -> {
             long accepted = teamMemberRepository.countAcceptedMembers(team.getId());
             if (accepted < team.getMaxCapacity()) {
                 throw AppException.badRequest(
-                        "Команда не укомплектована: потрібно " + team.getMaxCapacity()
-                        + " учасник(ів), зараз " + accepted + ".");
+                        "Team is not fully assembled: requires " + team.getMaxCapacity()
+                        + " member(s), currently " + accepted + ".");
             }
         });
     }

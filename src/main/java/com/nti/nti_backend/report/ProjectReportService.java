@@ -29,42 +29,42 @@ public class ProjectReportService {
 
     @Transactional
     public ProjectReport createReport(Application app) {
-        // Якщо звіт вже існує — не дублюємо
+        // If report already exists — do not duplicate
         if (reportRepository.findByApplication_Id(app.getId()).isPresent()) {
             return reportRepository.findByApplication_Id(app.getId()).get();
         }
 
-        // Назва проекту з formData
+        // Project name from formData
         String projectName = extractProjectName(app.getFormData());
 
-        // Тип програми
+        // Program type
         String programType = app.getCall().getProgram().getType().name();
 
-        // Тімлід і учасники
+        // Team leader and members
         String leaderName = app.getApplicant().getName();
         String members = app.getTeamSnapshot().stream()
                 .map(m -> m.getEmail() + " (" + m.getRole() + ")")
                 .collect(Collectors.joining(", "));
 
-        // Product Owner (тільки Program B)
+        // Product Owner (Program B only)
         String poName = null;
         if (app.getCall().getProgram().getType() == ProgramType.PROGRAM_B
                 && app.getProductOwner() != null) {
             poName = app.getProductOwner().getName();
         }
 
-        // KPI — зважений середній бал
+        // KPI — weighted average score
         Double kpiScore = evaluationRepository
                 .findWeightAverageScoreByApplicationId(app.getId())
                 .orElse(null);
 
-        // KPI деталі — бали по критеріях
+        // KPI details — scores per criterion
         String kpiDetails = buildKpiDetails(app.getId());
 
-        // Результатні документи
+        // Result documents
         String resultDocs = buildResultDocuments(app.getId());
 
-        // Мілстоуни
+        // Milestones
         var milestones = milestoneRepository.findAllByApplication_Id(app.getId());
         int total = milestones.size();
         int done = (int) milestones.stream()
@@ -99,12 +99,12 @@ public class ProjectReportService {
     @Transactional(readOnly = true)
     public ProjectReport getById(Long id) {
         return reportRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Звіт не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Report not found"));
     }
 
     public String exportToCsv(List<ProjectReportDTO> reports) {
         StringBuilder sb = new StringBuilder();
-        sb.append("ID,Назва проекту,Програма,Тімлід,Product Owner,Дата завершення,KPI бал,Мілстоуни (виконано/всього),Учасники\n");
+        sb.append("ID,Project Name,Program,Team Leader,Product Owner,Completion Date,KPI Score,Milestones (done/total),Members\n");
         for (ProjectReportDTO r : reports) {
             sb.append(csvCell(r.id())).append(",");
             sb.append(csvCell(r.projectName())).append(",");
@@ -125,8 +125,8 @@ public class ProjectReportService {
         if (formData == null || formData.isBlank()) return "—";
         try {
             Map<?, ?> map = objectMapper.readValue(formData, Map.class);
-            // Шукаємо типові ключі назви проекту
-            for (String key : List.of("projectName", "project_name", "назва", "title", "name")) {
+            // Search for common project name keys
+            for (String key : List.of("projectName", "project_name", "name", "title", "teamName")) {
                 Object val = map.get(key);
                 if (val != null) return val.toString();
             }
@@ -137,7 +137,7 @@ public class ProjectReportService {
     private String buildKpiDetails(Long appId) {
         var evals = evaluationRepository.findByApplication_Id(appId);
         if (evals.isEmpty()) return null;
-        // Групуємо по критерію: назва → середній бал
+        // Group by criterion: name → average score
         Map<String, Double> byCriteria = evals.stream()
                 .collect(Collectors.groupingBy(
                         e -> e.getCriteria().getName(),

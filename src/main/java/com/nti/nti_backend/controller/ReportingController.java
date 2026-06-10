@@ -55,7 +55,7 @@ public class ReportingController {
     }
 
     // ── GET /api/reporting/export/{callId} ────────────────────────────────────
-    // Vue "кнопка Excel" hits this endpoint.
+    // Vue "Excel button" hits this endpoint.
     // Returns the XLSX file as a binary download — browser prompts "Save As".
 
     @GetMapping("/export/{callId}")
@@ -65,7 +65,7 @@ public class ReportingController {
             @AuthenticationPrincipal User actor) {
         try {
             byte[] xlsx = reportingService.generateEvaluationReport(callId);
-            auditService.log(actor, "EXPORT", "CALL", callId, "Експорт XLSX звіту оцінювання");
+            auditService.log(actor, "EXPORT", "CALL", callId, "XLSX evaluation report export");
 
             // Build filename: evaluation_report_2026-04-01.xlsx
             String filename = "evaluation_report_"
@@ -85,7 +85,7 @@ public class ReportingController {
     }
 
     // ── GET /api/reporting/stats ──────────────────────────────────────────────
-    // Vue "адмін дашборд" calls this on page load to populate the stat cards.
+    // Vue "admin dashboard" calls this on page load to populate the stat cards.
     @GetMapping("/stats")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Map<String , Object>> getAdminStats() {
@@ -129,7 +129,7 @@ public class ReportingController {
     }
 
     /**
-     * Експорт списку заявок за фільтром: CSV, XLSX, PDF, DOCX.
+     * Export the list of applications by filter: CSV, XLSX, PDF, DOCX.
      */
     @GetMapping("/export")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
@@ -147,7 +147,7 @@ public class ReportingController {
             @AuthenticationPrincipal User actor) {
         try {
             auditService.log(actor, "EXPORT", "REPORT", callId,
-                    "Експорт " + format.toUpperCase() + " звіту типу: " + reportType);
+                    "Export " + format.toUpperCase() + " report of type: " + reportType);
             String type = reportType == null ? "applications" : reportType.trim().toLowerCase(Locale.ROOT);
             byte[] body = switch (type) {
                 case "teams" -> reportingService.exportTeamsReport(

@@ -27,7 +27,7 @@ public class AuditController {
     private final AuditService auditService;
     private final ApplicationRepository applicationRepository;
 
-    // Загальний журнал аудиту — тільки SUPER_ADMIN
+    // General audit log — SUPER_ADMIN only
     @GetMapping("/admin/audit")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<List<AuditEventDTO>> getAll(
@@ -45,7 +45,7 @@ public class AuditController {
             @PathVariable Long id) {
         Application application = applicationRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
-                        NOT_FOUND, "Заявку не знайдено")
+                        NOT_FOUND, "Application not found")
                 );
 
         boolean privileged = user.getAuthorities().stream()
@@ -63,7 +63,7 @@ public class AuditController {
         if (!privileged && !application.getApplicant().getId().equals(user.getId()) && !isTeamMember) {
             throw new ResponseStatusException(
                     FORBIDDEN,
-                    "Немає доступу до аудиту цієї заявки"
+                    "Access to this application's audit log is denied"
             );
         }
 

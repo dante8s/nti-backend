@@ -99,8 +99,8 @@ public class ReportingService {
         List<Criteria> criteria = criteriaRepository.findByCall_IdOrderBySortOrderAsc(callId);
         List<Evaluation> evaluations = evaluationRepository.findAllByCallId(callId);
 
-        // Всі заявки виклику — щоб заявки без оцінок теж потрапили в звіт
-        // findByCallIdWithApplicant робить JOIN FETCH applicant — без LazyInitializationException
+        // All call applications — so that applications without evaluations also appear in the report
+        // findByCallIdWithApplicant performs JOIN FETCH applicant — no LazyInitializationException
         List<Application> allApplications = applicationRepository.findByCallIdWithApplicant(callId);
 
         Map<Long, List<Evaluation>> byApplication = evaluations.stream()
@@ -125,7 +125,7 @@ public class ReportingService {
             createStyledCell(header, col++, "Weighted Avg", headerStyle);
             createStyledCell(header, col,   "Recommendation", headerStyle);
 
-            // Фіксуємо кількість колонок після побудови заголовка
+            // Fix the number of columns after building the header
             final int totalCols = col + 1;
 
             int rowNum = 1;
@@ -138,7 +138,7 @@ public class ReportingService {
 
                 row.createCell(col++).setCellValue(appId);
 
-                // Ім'я заявника
+                // Applicant name
                 String applicantName = "Unknown";
                 if (application.getApplicant() != null) {
                     String name = application.getApplicant().getName();
@@ -147,7 +147,7 @@ public class ReportingService {
                 }
                 row.createCell(col++).setCellValue(applicantName);
 
-                // Середні бали по кожному критерію
+                // Average scores per criterion
                 Map<Long, Double> scoreByCriteria = appEvals.stream()
                         .filter(e -> e.getCriteria() != null)
                         .collect(Collectors.groupingBy(
@@ -169,7 +169,7 @@ public class ReportingService {
                 double weightedAvg = totalWeight > 0 ? weightedSum / totalWeight : 0;
                 row.createCell(col++).setCellValue(Math.round(weightedAvg * 100.0) / 100.0);
 
-                // Рекомендація — більшість голосів; при нічиї — алфавітно перший (детерміновано)
+                // Recommendation — majority vote; on tie — alphabetically first (deterministic)
                 String recommendation = appEvals.stream()
                         .filter(e -> e.getRecommendation() != null)
                         .collect(Collectors.groupingBy(
@@ -182,7 +182,7 @@ public class ReportingService {
                 row.createCell(col).setCellValue(recommendation);
             }
 
-            // Автоширина по фактичній кількості колонок заголовка
+            // Auto-width based on actual header column count
             for (int i = 0; i < totalCols; i++) {
                 sheet.autoSizeColumn(i);
             }
@@ -988,7 +988,7 @@ public class ReportingService {
     }
 
     private static float[] pdfColumnWidths(float tableWidth, int cols) {
-        /* Трохи ширші колонки для текстів (як у Word); сума = 1.0 */
+        /* Slightly wider columns for text (as in Word); sum = 1.0 */
         double[] w = {
                 0.055, 0.045, 0.10, 0.085, 0.065, 0.075,
                 0.045, 0.075, 0.095, 0.12, 0.065, 0.115

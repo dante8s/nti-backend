@@ -1,4 +1,4 @@
--- Стандартна рубрика оцінювання для викликів без жодного критерію (ваги дають суму 100%).
+-- Default evaluation rubric for calls without any criteria (weights sum to 100%).
 INSERT INTO criteria (call_id, name, description, weight_percent, max_score, sort_order)
 SELECT c.id,
        v.name,
@@ -10,23 +10,23 @@ FROM calls c
 CROSS JOIN (
     VALUES
         (1,
-         'Оригінальність ідеї',
-         'Наскільки проєкт відрізняється від уже відомих рішень, свіжість формулювання проблеми та підходів.',
+         'Originality of the idea',
+         'How much the project differs from existing solutions, freshness of the problem formulation and approaches.',
          25,
          100.0),
         (2,
-         'Технічна реалізованість',
-         'Реалістичність технічного плану, архітектури та дорожньої карти виконання.',
+         'Technical feasibility',
+         'Realism of the technical plan, architecture and implementation roadmap.',
          25,
          100.0),
         (3,
-         'Соціальний та ринковий вплив',
-         'Користь для аудиторії, соціально-екологічний або економічний ефект, потенціал масштабування.',
+         'Social and market impact',
+         'Value for the audience, social-ecological or economic effect, scaling potential.',
          25,
          100.0),
         (4,
-         'Якість і повнота матеріалів',
-         'Структурованість поданої документації: бюджет, аналіз ризиків, монетизація та відповідність вимогам виклику.',
+         'Quality and completeness of materials',
+         'Structured submitted documentation: budget, risk analysis, monetization and compliance with call requirements.',
          25,
          100.0)
 ) AS v (sort_order, name, description, weight_percent, max_score)

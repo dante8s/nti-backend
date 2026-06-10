@@ -100,10 +100,10 @@ public class GdprService {
     @Transactional
     public void anonymize(User user, String passwordConfirm) {
         if (!passwordEncoder.matches(passwordConfirm, user.getPassword())) {
-            throw AppException.badRequest("Невірний пароль");
+            throw AppException.badRequest("Invalid password");
         }
 
-        user.setName("Видалений користувач");
+        user.setName("Deleted user");
         user.setEmail("deleted_" + user.getId() + "@nti.removed");
         user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
         user.setVerificationToken(null);

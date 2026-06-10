@@ -29,7 +29,7 @@ public class ApplicationController {
 
     private final ApplicationService appService;
 
-    // Створити draft
+    // Create draft
     @PostMapping("/applications")
     @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<ApplicationDTO> create(
@@ -40,7 +40,7 @@ public class ApplicationController {
 
     /**
      * PUT /api/applications/{id}
-     * Оновити formData чернетки або NEEDS_REVISION без зміни статусу.
+     * Update formData of a draft or NEEDS_REVISION application without changing status.
      */
     @PutMapping("/applications/{id}")
     @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
@@ -53,7 +53,7 @@ public class ApplicationController {
         );
     }
 
-    // Відправити заявку
+    // Submit application
     @PatchMapping("/applications/{id}/submit")
     @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<ApplicationDTO> submit(
@@ -62,7 +62,7 @@ public class ApplicationController {
         return ResponseEntity.ok(appService.submit(id, user.getId()));
     }
 
-    // Мої заявки
+    // My applications
     @GetMapping("/applications/my")
     @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<List<ApplicationDTO>> getMy(
@@ -74,9 +74,9 @@ public class ApplicationController {
 
     /**
      * GET /api/applications/my/by-call/{callId}
-     * Знайти мою заявку для конкретного виклику.
-     * Повертає 404 якщо заявки немає — фронт використовує це
-     * щоб зрозуміти: відкривати форму для створення чи редагування.
+     * Find my application for a specific call.
+     * Returns 404 if no application exists — the frontend uses this
+     * to decide: open the creation form or the edit form.
      */
     @GetMapping("/applications/my/by-call/{callId}")
     @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
@@ -88,7 +88,7 @@ public class ApplicationController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Одна заявка (власник, ментор, комісія, адмін)
+    // Single application (owner, mentor, commission, admin)
     @GetMapping("/applications/{id}")
     @PreAuthorize("hasAnyRole('STUDENT','MENTOR','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN','FIRM','FIRM_USER')")
     public ResponseEntity<?> getOne(
@@ -97,17 +97,17 @@ public class ApplicationController {
         try {
             return ResponseEntity.ok(appService.getByIdForViewer(id, user));
         } catch (RuntimeException e) {
-            if ("Немає доступу".equals(e.getMessage())) {
+            if ("Access denied".equals(e.getMessage())) {
                 return ResponseEntity.status(403).build();
             }
-            if ("Заявку не знайдено".equals(e.getMessage())) {
+            if ("Application not found".equals(e.getMessage())) {
                 return ResponseEntity.notFound().build();
             }
             throw e;
         }
     }
 
-    // Upload документу
+    // Upload document
     @PostMapping(
             value = "/applications/{id}/documents/{documentType}",
             consumes = "multipart/form-data"
@@ -132,11 +132,11 @@ try {
     return ResponseEntity.badRequest().build();
 }
 
-// Перевірка PPTX
+// Check PPTX
 boolean isPptx = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         .equals(file.getContentType());
 
-// PPTX дозволений тільки для RESULT_1 та RESULT_2
+// PPTX is allowed only for RESULT_1 and RESULT_2
 boolean isResultDoc = "RESULT_1".equals(documentType) || "RESULT_2".equals(documentType);
 
 if (!isPdf && !isDocx && !(isPptx && isResultDoc))
@@ -165,14 +165,14 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         }
     }
 
-    // Всі заявки — ADMIN / SUPER_ADMIN
+    // All applications — ADMIN / SUPER_ADMIN
     @GetMapping("/admin/applications")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<ApplicationDTO>> getAll() {
         return ResponseEntity.ok(appService.getAll());
     }
 
-    // Змінити статус — адмін або уповноважений комісії (SUPER_EVALUATOR)
+    // Change status — admin or authorized commission member (SUPER_EVALUATOR)
     @PatchMapping("/admin/applications/{id}/status")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','SUPER_EVALUATOR')")
     public ResponseEntity<?> changeStatus(
@@ -213,7 +213,7 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         return ResponseEntity.ok(appService.getByCall(callId));
     }
 
-    /** Завершити проект — лідер команди */
+    /** Complete project — team leader */
     @PatchMapping("/applications/{id}/complete")
     @PreAuthorize(STUDENT_OR_SUPER_ADMIN)
     public ResponseEntity<?> completeProject(
@@ -226,7 +226,7 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         }
     }
 
-    /** Завершити проект — адмін */
+    /** Complete project — admin */
     @PatchMapping("/admin/applications/{id}/complete")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<?> completeProjectAdmin(
@@ -239,14 +239,14 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         }
     }
 
-    /** Список запитів на завершення — для адміна */
+    /** List of completion requests — for admin */
     @GetMapping("/admin/applications/completion-requests")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<?> getCompletionRequests() {
         return ResponseEntity.ok(appService.getCompletionRequests());
     }
 
-    /** Адмін підтверджує завершення проекту */
+    /** Admin confirms project completion */
     @PatchMapping("/admin/applications/{id}/approve-completion")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<?> approveCompletion(@PathVariable Long id) {
@@ -257,7 +257,7 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         }
     }
 
-    /** Адмін відхиляє запит на завершення */
+    /** Admin rejects the completion request */
     @PatchMapping("/admin/applications/{id}/reject-completion")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<?> rejectCompletion(@PathVariable Long id) {
@@ -268,14 +268,14 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         }
     }
 
-    /** Список юзерів для призначення Product Owner — для адмінів */
+    /** List of users for Product Owner assignment — for admins */
     @GetMapping("/admin/users/for-po-assignment")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<com.nti.nti_backend.user.UserDTO>> getUsersForPO() {
         return ResponseEntity.ok(appService.getAllUsersForPO());
     }
 
-    /** Список запитів на завершення Program B для Product Owner */
+    /** List of Program B completion requests for Product Owner */
     @GetMapping("/product-owner/applications/completion-requests")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getPOCompletionRequests(
@@ -283,7 +283,7 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         return ResponseEntity.ok(appService.getPOCompletionRequests(user.getId()));
     }
 
-    /** Product Owner підтверджує завершення */
+    /** Product Owner confirms completion */
     @PatchMapping("/product-owner/applications/{id}/approve-completion")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> approveCompletionPO(
@@ -296,7 +296,7 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         }
     }
 
-    /** Product Owner відхиляє завершення */
+    /** Product Owner rejects completion */
     @PatchMapping("/product-owner/applications/{id}/reject-completion")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> rejectCompletionPO(
@@ -309,7 +309,7 @@ if (!isPdf && !isDocx && !(isPptx && isResultDoc))
         }
     }
 
-    /** Історія проектів поточного користувача */
+    /** Project history of the current user */
     @GetMapping("/applications/my/projects")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ProjectHistoryDTO> getMyProjects(

@@ -26,7 +26,7 @@ public class EmailTemplateController {
         return ResponseEntity.ok(service.getAll().stream()
                 .filter(t -> t.id().equals(id))
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Шаблон не знайдено")));
+                .orElseThrow(() -> new RuntimeException("Template not found")));
     }
 
     @PutMapping("/{id}")

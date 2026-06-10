@@ -51,34 +51,34 @@ public class AuthController {
     public ResponseEntity<String> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest req) {
         authService.forgotPassword(req);
-        // Завжди однакова відповідь — щоб не розкривати чи існує email
-        return ResponseEntity.ok("Якщо email існує — лист надіслано");
+        // Always the same response — to avoid revealing whether the email exists
+        return ResponseEntity.ok("If the email exists, a message has been sent");
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<String> resetPassword(
             @Valid @RequestBody ResetPasswordRequest req) {
         authService.resetPassword(req);
-        return ResponseEntity.ok("Пароль змінено");
+        return ResponseEntity.ok("Password has been changed");
     }
 
-    // --- Тільки SUPER_ADMIN ---
+    // --- SUPER_ADMIN only ---
 
     @PostMapping("/admin/users/{id}/approve")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<String> approveUser(@PathVariable Long id,
                                               @AuthenticationPrincipal User actor) {
         authService.approveUser(id, actor);
-        return ResponseEntity.ok("Акаунт схвалено");
+        return ResponseEntity.ok("Account approved");
     }
-    
+
     @PostMapping("/admin/invite-mentor")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<String> inviteMentor(
             @RequestBody InviteMentorRequest request
     ) {
         authService.inviteMentor(request.email());
-        return ResponseEntity.ok("Запрошення надіслано на " + request.email());
+        return ResponseEntity.ok("Invitation sent to " + request.email());
     }
 
     @PostMapping("/complete-invite")
@@ -113,7 +113,7 @@ public class AuthController {
             @RequestParam String reason,
             @AuthenticationPrincipal User actor) {
         authService.rejectUser(id, reason, actor);
-        return ResponseEntity.ok("Акаунт відхилено");
+        return ResponseEntity.ok("Account rejected");
     }
 
     @PostMapping("/admin/users/{id}/suspend")
@@ -123,7 +123,7 @@ public class AuthController {
             @RequestParam String reason,
             @AuthenticationPrincipal User actor) {
         authService.suspendUser(id, reason, actor);
-        return ResponseEntity.ok("Акаунт заблоковано");
+        return ResponseEntity.ok("Account suspended");
     }
 
     @PostMapping("/admin/users/{id}/roles/add")
@@ -133,7 +133,7 @@ public class AuthController {
             @RequestParam String role,
             @AuthenticationPrincipal User actor) {
         authService.addRole(id, Role.valueOf(role), actor);
-        return ResponseEntity.ok("Роль додано");
+        return ResponseEntity.ok("Role added");
     }
 
     @PostMapping("/admin/users/{id}/roles/remove")
@@ -143,7 +143,7 @@ public class AuthController {
             @RequestParam String role,
             @AuthenticationPrincipal User actor) {
         authService.removeRole(id, Role.valueOf(role), actor);
-        return ResponseEntity.ok("Роль видалено");
+        return ResponseEntity.ok("Role removed");
     }
 
     @GetMapping("/admin/users/pending")

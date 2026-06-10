@@ -41,6 +41,6 @@ public class GdprController {
             @AuthenticationPrincipal User user) {
 
         gdprService.anonymize(user, request.password());
-        return ResponseEntity.ok("Персональні дані видалено. Акаунт деактивовано.");
+        return ResponseEntity.ok("Personal data deleted. Account deactivated.");
     }
 }

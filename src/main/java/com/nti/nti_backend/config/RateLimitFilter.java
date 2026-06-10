@@ -46,14 +46,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             response.setStatus(429);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding("UTF-8");
-            response.getWriter().write("{\"error\":\"Забагато спроб. Спробуйте пізніше.\"}");
+            response.getWriter().write("{\"error\":\"Too many attempts. Please try again later.\"}");
         }
     }
 
     private int capacityFor(String path) {
-        if (path.startsWith("/api/auth/login"))           return 10; // 10 спроб/хв на IP
-        if (path.startsWith("/api/auth/register"))        return 5;  // 5 реєстрацій/хв на IP
-        if (path.startsWith("/api/auth/forgot-password")) return 3;  // 3 запити/хв на IP
+        if (path.startsWith("/api/auth/login"))           return 10; // 10 attempts/min per IP
+        if (path.startsWith("/api/auth/register"))        return 5;  // 5 registrations/min per IP
+        if (path.startsWith("/api/auth/forgot-password")) return 3;  // 3 requests/min per IP
         return 0;
     }
 

@@ -84,7 +84,7 @@ public class EmailService {
         send(to, EmailTemplateType.APPLICATION_STATUS_CHANGED, Map.of(
                 "name",    name,
                 "status",  status,
-                "comment", comment != null ? "Коментар: " + comment : "",
+                "comment", comment != null ? "Comment: " + comment : "",
                 "link",    frontendUrl + "/app/my-applications"
         ));
     }
@@ -147,7 +147,7 @@ public class EmailService {
         ));
     }
 
-    // Блокування акаунту
+    // Account suspension
     @Async
     public void sendAccountSuspended(String to, String name, String reason) {
         send(to, EmailTemplateType.ACCOUNT_SUSPENDED, Map.of(

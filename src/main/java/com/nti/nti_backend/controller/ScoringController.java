@@ -44,7 +44,7 @@ public class ScoringController {
         this.commissionCriteriaDefaultSeeder = commissionCriteriaDefaultSeeder;
     }
 
-    // POST /api/evaluations/score  — submit or update one score (лише SUPER_EVALUATOR / адміни)
+    // POST /api/evaluations/score  — submit or update one score (SUPER_EVALUATOR / admins only)
     @PostMapping("/score")
     @PreAuthorize("hasAnyRole('SUPER_EVALUATOR','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Evaluation> submitScore(
@@ -86,7 +86,7 @@ public class ScoringController {
         return ResponseEntity.ok(myScores);
     }
 
-    // ── Weighted average — "середній бал" ────────────────────────────────────
+    // ── Weighted average — "average score" ───────────────────────────────────
     // The key scoring endpoint — returns the weighted average score for one application.
     // Formula: SUM(score × weightPercent) / SUM(weightPercent)
     @GetMapping("/{appId}/average")
@@ -164,7 +164,7 @@ public class ScoringController {
                         programName = app.getCall().getProgram().getName();
                     }
                     row.put("programName", programName);
-                    // Назва команди
+                    // Team name
                     String teamName = null;
                     if (applicantId != null) {
                         teamName = teamRepository.findByLeader_Id(applicantId)
@@ -172,7 +172,7 @@ public class ScoringController {
                                 .orElse(null);
                     }
                     row.put("teamName", teamName);
-                    // Снапшот учасників на момент подачі
+                    // Snapshot of members at the time of submission
                     List<Map<String, Object>> members = applicationMemberRepository
                             .findByApplicationId(app.getId())
                             .stream()

@@ -11,6 +11,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class RecaptchaService {
 
+    @Value("${recaptcha.enabled:false}")
+    private boolean enabled;
+
     @Value("${recaptcha.secret}")
     private String secretKey;
 
@@ -20,18 +23,22 @@ public class RecaptchaService {
     private final RestTemplate restTemplate;
 
     public boolean verify(String captchaToken) {
-        // Якщо секрет не налаштований — пропускаємо (локальна розробка)
+        if (!enabled) {
+            return true;
+        }
+
+        // If secret is not configured — pass through (local development)
         if (secretKey == null || secretKey.isBlank()) {
             return true;
         }
 
-        // Якщо токен порожній — одразу відхиляємо
+        // If the token is empty — reject immediately
         if (captchaToken == null
                 || captchaToken.isBlank()) {
             return false;
         }
 
-        // Відправляємо запит до Google
+        // Send request to Google
         String url = recaptchaUrl
                 + "?secret=" + secretKey
                 + "&response=" + captchaToken;
@@ -40,7 +47,7 @@ public class RecaptchaService {
                 url, null, Map.class
         );
 
-        // Google повертає {"success": true/false}
+        // Google returns {"success": true/false}
         if (response == null) return false;
 
         return Boolean.TRUE.equals(

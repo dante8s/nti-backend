@@ -43,34 +43,34 @@ public class AuthService {
 
 
 
-    // Ролі які можна вибрати при реєстрації
+    // Roles available for selection during registration
     private static final Set<String> ALLOWED_ROLES =
             Set.of("STUDENT", "FIRM", "MENTOR");
 
     // -----------------------------------------------
-    // РЕЄСТРАЦІЯ
+    // REGISTRATION
     // -----------------------------------------------
     public String register(RegisterRequest request, String clientIp) {
         if (!recaptchaService.verify(request.captchaToken())) {
-            throw AppException.badRequest("Captcha не пройдена. Спробуйте ще раз.");
+            throw AppException.badRequest("Captcha failed. Please try again.");
         }
 
         if (!request.gdprConsent()) {
-            throw AppException.badRequest("Потрібна згода на обробку даних");
+            throw AppException.badRequest("Data processing consent is required");
         }
 
         if (!request.email().toLowerCase().endsWith("@student.ukf.sk")) {
-            throw AppException.badRequest("Реєстрація дозволена лише для адрес @student.ukf.sk");
+            throw AppException.badRequest("Registration is only allowed for @student.ukf.sk addresses");
         }
 
         for (String role : request.roles()) {
             if (!ALLOWED_ROLES.contains(role)) {
-                throw AppException.badRequest("Недозволена роль: " + role);
+                throw AppException.badRequest("Disallowed role: " + role);
             }
         }
 
         if (userRepository.existsByEmail(request.email())) {
-            throw AppException.conflict("Email вже зареєстрований");
+            throw AppException.conflict("Email is already registered");
         }
 
         Set<Role> roles = request.roles().stream()
@@ -101,31 +101,31 @@ public class AuthService {
             log.warn("Verification email failed for: {}", user.getEmail(), e);
         }
 
-        return "Перевірте пошту і підтвердіть email. "
-                + "Після підтвердження очікуйте схвалення адміна.";
+        return "Check your email and confirm your address. "
+                + "After confirmation, await administrator approval.";
     }
 
     // -----------------------------------------------
-    // ЛОГІН
+    // LOGIN
     // -----------------------------------------------
     public AuthResponse login(LoginRequest request) {
         if (!recaptchaService.verify(request.captchaToken())) {
-            throw AppException.badRequest("Captcha не пройдена. Спробуйте ще раз.");
+            throw AppException.badRequest("Captcha failed. Please try again.");
         }
 
         User user = userRepository
                 .findByEmail(request.email())
-                .orElseThrow(() -> AppException.notFound("Користувача не знайдено"));
+                .orElseThrow(() -> AppException.notFound("User not found"));
 
         if (!user.isEmailVerified()) {
-            throw AppException.forbidden("Підтвердіть email перед входом");
+            throw AppException.forbidden("Please verify your email before logging in");
         }
 
         switch (user.getAccountStatus()) {
-            case PENDING   -> throw AppException.forbidden("Акаунт очікує схвалення адміністратора");
-            case REJECTED  -> throw AppException.forbidden("Акаунт відхилено. Зверніться до адміністратора.");
-            case SUSPENDED -> throw AppException.forbidden("Акаунт заблоковано. Зверніться до адміністратора.");
-            default -> { /* APPROVED — продовжуємо */ }
+            case PENDING   -> throw AppException.forbidden("Account is awaiting administrator approval");
+            case REJECTED  -> throw AppException.forbidden("Account has been rejected. Please contact the administrator.");
+            case SUSPENDED -> throw AppException.forbidden("Account is suspended. Please contact the administrator.");
+            default -> { /* APPROVED — continue */ }
         }
 
         authManager.authenticate(
@@ -151,11 +151,11 @@ public class AuthService {
     }
 
     // -----------------------------------------------
-    // ЗАПРОСИТИ МЕНТОРА
+    // INVITE MENTOR
     // -----------------------------------------------
     public void inviteMentor(String email) {
         if (userRepository.existsByEmail(email)) {
-            throw AppException.conflict("Користувач з таким email вже існує");
+            throw AppException.conflict("A user with this email already exists");
         }
 
         String inviteToken = UUID.randomUUID().toString();
@@ -175,12 +175,12 @@ public class AuthService {
     }
 
     // -----------------------------------------------
-    // ЗАВЕРШЕННЯ РЕЄСТРАЦІЇ ПО ЗАПРОШЕННЮ
+    // COMPLETE REGISTRATION VIA INVITE
     // -----------------------------------------------
     public String completeInvite(CompleteInviteRequest request) {
         User user = userRepository
                 .findByInviteToken(request.inviteToken())
-                .orElseThrow(() -> AppException.badRequest("Невірний або прострочений токен запрошення"));
+                .orElseThrow(() -> AppException.badRequest("Invalid or expired invite token"));
 
         if (request.name() == null || request.name().isBlank()) {
             throw AppException.badRequest("Name field is empty!");
@@ -202,17 +202,17 @@ public class AuthService {
             log.warn("Notification email failed for: {}", user.getEmail(), e);
         }
 
-        return "Реєстрацію завершено. Очікуйте схвалення адміністратора.";
+        return "Registration complete. Awaiting administrator approval.";
     }
 
     // -----------------------------------------------
-    // ЗАВЕРШЕННЯ РЕЄСТРАЦІЇ ЧЛЕНА ОРГАНІЗАЦІЇ
+    // COMPLETE ORGANIZATION MEMBER REGISTRATION
     // -----------------------------------------------
     public String completeOrgMemberInvite(CompleteOrgMemberInviteRequest request) {
         User user = userRepository
                 .findByInviteToken(request.inviteToken())
                 .orElseThrow(() -> new RuntimeException(
-                        "Невірний або прострочений токен запрошення"
+                        "Invalid or expired invite token"
                 ));
         if (request.name() == null || request.name().isBlank()) {
             throw new RuntimeException("Name field is empty!");
@@ -235,14 +235,14 @@ public class AuthService {
             }
         });
 
-        return "Реєстрацію завершено. Ви можете увійти в систему та прийняти запрошення до команди.";
+        return "Registration complete. You can now log in and accept the team invitation.";
     }
 
     public String completeTeamMemberInvite(CompleteOrgMemberInviteRequest request) {
         User user = userRepository
                 .findByInviteToken(request.inviteToken())
                 .orElseThrow(() -> new RuntimeException(
-                        "Невірний або прострочений токен запрошення"
+                        "Invalid or expired invite token"
                 ));
         if (request.name() == null || request.name().isBlank()) {
             throw new RuntimeException("Name field is empty!");
@@ -267,17 +267,17 @@ public class AuthService {
             System.out.println("Admin notification failed");
         }
 
-        return "Реєстрацію завершено. Очікуйте схвалення адміністратора.";
+        return "Registration complete. Awaiting administrator approval.";
     }
 
 
     // -----------------------------------------------
-    // СХВАЛЕННЯ АКАУНТУ (тільки SUPER_ADMIN)
-    // СХВАЛЕННЯ / ВІДХИЛЕННЯ / БЛОКУВАННЯ АКАУНТУ
+    // APPROVE ACCOUNT (SUPER_ADMIN only)
+    // APPROVE / REJECT / SUSPEND ACCOUNT
     // -----------------------------------------------
     public void approveUser(Long userId, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("User not found"));
 
         user.setAccountStatus(AccountStatus.APPROVED);
         user.setEnabled(true);
@@ -289,12 +289,12 @@ public class AuthService {
 
         emailService.sendAccountApproved(user.getEmail(), user.getName());
         auditService.log(actor, "USER_APPROVED", "USER", userId,
-                "Акаунт схвалено: " + user.getEmail());
+                "Account approved: " + user.getEmail());
     }
 
     public void rejectUser(Long userId, String reason, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("User not found"));
 
         user.setAccountStatus(AccountStatus.REJECTED);
         user.setEnabled(false);
@@ -307,12 +307,12 @@ public class AuthService {
 
         emailService.sendAccountRejected(user.getEmail(), user.getName(), reason);
         auditService.log(actor, "USER_REJECTED", "USER", userId,
-                "Акаунт відхилено: " + user.getEmail() + ". Причина: " + reason);
+                "Account rejected: " + user.getEmail() + ". Reason: " + reason);
     }
 
     public void suspendUser(Long userId, String reason, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("User not found"));
 
         user.setAccountStatus(AccountStatus.SUSPENDED);
         user.setEnabled(false);
@@ -320,15 +320,15 @@ public class AuthService {
 
         emailService.sendAccountSuspended(user.getEmail(), user.getName(), reason);
         auditService.log(actor, "USER_SUSPENDED", "USER", userId,
-                "Акаунт заблоковано: " + user.getEmail() + ". Причина: " + reason);
+                "Account suspended: " + user.getEmail() + ". Reason: " + reason);
     }
 
     // -----------------------------------------------
-    // ДОДАТИ / ЗАБРАТИ РОЛЬ
+    // ADD / REMOVE ROLE
     // -----------------------------------------------
     public void addRole(Long userId, Role role, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("User not found"));
         user.getRoles().add(role);
         userRepository.save(user);
         if (role == Role.MENTOR) {
@@ -337,17 +337,17 @@ public class AuthService {
         }
 
         auditService.log(actor, "USER_ROLE_ADDED", "USER", userId,
-                "Роль " + role.name() + " додано для: " + user.getEmail());
+                "Role " + role.name() + " added for: " + user.getEmail());
 
     }
 
     public void removeRole(Long userId, Role role, User actor) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> AppException.notFound("Юзера не знайдено"));
+                .orElseThrow(() -> AppException.notFound("User not found"));
         user.getRoles().remove(role);
         userRepository.save(user);
         auditService.log(actor, "USER_ROLE_REMOVED", "USER", userId,
-                "Роль " + role.name() + " видалено для: " + user.getEmail());
+                "Role " + role.name() + " removed for: " + user.getEmail());
 
         userRepository.save(user);
         if (role == Role.MENTOR) {
@@ -366,26 +366,26 @@ public class AuthService {
             if (orgsPublic != null) orgsPublic.clear();
         }
         auditService.log(actor, "USER_ROLE_REMOVED", "USER", userId,
-                "Роль " + role.name() + " видалено для: " + user.getEmail());
+                "Role " + role.name() + " removed for: " + user.getEmail());
     }
 
     // -----------------------------------------------
-    // ПІДТВЕРДЖЕННЯ EMAIL
+    // EMAIL VERIFICATION
     // -----------------------------------------------
     public String verifyEmail(String token) {
         User user = userRepository
                 .findByVerificationToken(token)
-                .orElseThrow(() -> AppException.badRequest("Невірний токен"));
+                .orElseThrow(() -> AppException.badRequest("Invalid token"));
 
         if (user.isEmailVerified()) {
-            return "Email вже підтверджений";
+            return "Email is already verified";
         }
 
         user.setEmailVerified(true);
         user.setVerificationToken(null);
         userRepository.save(user);
 
-        // Повідомляємо адміна ПІСЛЯ підтвердження email
+        // Notify admin AFTER email verification
         try {
             emailService.sendNewUserNotification(
                     user.getName(),
@@ -396,11 +396,11 @@ public class AuthService {
             log.warn("Admin notification failed for: {}", user.getEmail(), e);
         }
 
-        return "Email підтверджено. Очікуйте схвалення адміністратора.";
+        return "Email verified. Awaiting administrator approval.";
     }
 
     // -----------------------------------------------
-    // СКИДАННЯ ПАРОЛЯ
+    // PASSWORD RESET
     // -----------------------------------------------
     public void forgotPassword(ForgotPasswordRequest request) {
         userRepository.findByEmail(request.email())
@@ -416,11 +416,11 @@ public class AuthService {
     public void resetPassword(ResetPasswordRequest request) {
         User user = userRepository
                 .findByResetPasswordToken(request.token())
-                .orElseThrow(() -> AppException.badRequest("Невірний токен"));
+                .orElseThrow(() -> AppException.badRequest("Invalid token"));
 
         if (user.getResetTokenExpiry() == null
                 || user.getResetTokenExpiry().isBefore(LocalDateTime.now())) {
-            throw AppException.badRequest("Токен прострочений");
+            throw AppException.badRequest("Token has expired");
         }
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));

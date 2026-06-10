@@ -50,7 +50,7 @@ class TeamServiceInviteTest {
 
         assertThatThrownBy(() -> teamService.inviteMember(99L, 255L))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("не існує");
+                .hasMessageContaining("does not exist");
     }
 
     @Test

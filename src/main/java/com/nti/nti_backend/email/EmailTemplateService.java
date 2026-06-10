@@ -23,12 +23,12 @@ public class EmailTemplateService {
     public EmailTemplateDTO getByType(EmailTemplateType type) {
         return repository.findByType(type)
                 .map(this::toDTO)
-                .orElseThrow(() -> new RuntimeException("Шаблон не знайдено: " + type));
+                .orElseThrow(() -> new RuntimeException("Template not found: " + type));
     }
 
     public EmailTemplateDTO update(Long id, UpdateEmailTemplateRequest req) {
         EmailTemplate tpl = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Шаблон не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Template not found"));
         tpl.setSubject(req.subject());
         tpl.setBody(req.body());
         return toDTO(repository.save(tpl));
@@ -40,7 +40,7 @@ public class EmailTemplateService {
      */
     public String[] render(EmailTemplateType type, Map<String, String> vars) {
         EmailTemplate tpl = repository.findByType(type)
-                .orElseThrow(() -> new RuntimeException("Шаблон не знайдено: " + type));
+                .orElseThrow(() -> new RuntimeException("Template not found: " + type));
         String subject = replace(tpl.getSubject(), vars);
         String body    = replace(tpl.getBody(), vars);
         return new String[]{subject, body};
@@ -51,190 +51,190 @@ public class EmailTemplateService {
     @PostConstruct
     void seed() {
         seed(EmailTemplateType.VERIFICATION,
-                "NTI — Підтвердіть вашу email адресу",
+                "NTI — Please verify your email address",
                 """
-                Вітаємо у NTI!
+                Welcome to NTI!
 
-                Для підтвердження вашої email адреси перейдіть за посиланням:
+                To verify your email address, please click the link below:
 
                 {{link}}
 
-                Посилання дійсне 24 години.
+                The link is valid for 24 hours.
 
-                Якщо ви не реєструвались — проігноруйте цей лист.
+                If you did not register, please ignore this email.
 
-                Команда NTI""",
+                NTI Team""",
                 "{{link}}");
 
         seed(EmailTemplateType.RESET_PASSWORD,
-                "NTI — Скидання пароля",
+                "NTI — Password reset",
                 """
-                Ви запросили скидання пароля.
+                You requested a password reset.
 
-                Перейдіть за посиланням щоб встановити новий пароль:
+                Click the link below to set a new password:
 
                 {{link}}
 
-                Посилання дійсне 1 годину.
+                The link is valid for 1 hour.
 
-                Якщо ви не запитували скидання — проігноруйте цей лист.
+                If you did not request a reset, please ignore this email.
 
-                Команда NTI""",
+                NTI Team""",
                 "{{link}}");
 
         seed(EmailTemplateType.WELCOME,
-                "NTI — Ласкаво просимо!",
+                "NTI — Welcome!",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                Ваш акаунт успішно підтверджено.
+                Your account has been successfully verified.
 
-                Тепер заповніть ваш профіль щоб подати заявку на програму:
+                Please complete your profile to apply for a program:
                 {{link}}
 
-                Команда NTI""",
+                NTI Team""",
                 "{{name}},{{link}}");
 
         seed(EmailTemplateType.APPLICATION_STATUS_CHANGED,
-                "NTI — Статус вашої заявки змінено",
+                "NTI — Your application status has been updated",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                Статус вашої заявки змінено на: {{status}}
+                Your application status has been changed to: {{status}}
 
                 {{comment}}
 
-                Деталі у вашому кабінеті:
+                View details in your account:
                 {{link}}
 
-                Команда NTI""",
+                NTI Team""",
                 "{{name}},{{status}},{{comment}},{{link}}");
 
         seed(EmailTemplateType.NEW_USER_NOTIFICATION,
-                "NTI — Новий користувач очікує схвалення",
+                "NTI — A new user is awaiting approval",
                 """
-                Новий користувач зареєструвався:
+                A new user has registered:
 
-                Ім'я: {{name}}
+                Name: {{name}}
                 Email: {{email}}
-                Ролі: {{roles}}
+                Roles: {{roles}}
 
-                Перейдіть до панелі адміна щоб схвалити:
+                Go to the admin panel to approve:
                 {{link}}""",
                 "{{name}},{{email}},{{roles}},{{link}}");
 
         seed(EmailTemplateType.MENTOR_INVITE,
-                "NTI — Запрошення стати ментором",
+                "NTI — Invitation to become a mentor",
                 """
-                Вітаємо!
+                Hello!
 
-                Адміністратор NTI запросив вас стати ментором.
+                The NTI administrator has invited you to become a mentor.
 
-                Для завершення реєстрації перейдіть за посиланням:
+                To complete your registration, please click the link below:
 
                 {{link}}
 
-                Вам потрібно буде вказати ваше ім'я та пароль.
-                Посилання дійсне 7 днів.
+                You will need to provide your name and set a password.
+                The link is valid for 7 days.
 
-                Команда NTI""",
+                NTI Team""",
                 "{{link}}");
 
         seed(EmailTemplateType.ORG_MEMBER_INVITE,
-                "NTI — Запрошення до організації {{orgName}}",
+                "NTI — Invitation to join organization {{orgName}}",
                 """
-                Вітаємо!
+                Hello!
 
-                Вас запросили приєднатися до організації «{{orgName}}» на платформі NTI.
+                You have been invited to join the organization "{{orgName}}" on the NTI platform.
 
-                Для завершення реєстрації перейдіть за посиланням:
+                To complete your registration, please click the link below:
 
                 {{link}}
 
-                Посилання дійсне 7 днів.
+                The link is valid for 7 days.
 
-                Команда NTI""",
+                NTI Team""",
                 "{{orgName}},{{link}}");
 
         seed(EmailTemplateType.ACCOUNT_APPROVED,
-                "NTI — Ваш акаунт схвалено!",
+                "NTI — Your account has been approved!",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                Ваш акаунт схвалено адміністратором.
+                Your account has been approved by the administrator.
 
-                Тепер ви можете увійти в систему:
+                You can now log in:
                 {{link}}
 
-                Команда NTI""",
+                NTI Team""",
                 "{{name}},{{link}}");
 
         seed(EmailTemplateType.ACCOUNT_REJECTED,
-                "NTI — Акаунт не схвалено",
+                "NTI — Account not approved",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                На жаль, ваш акаунт не схвалено.
+                Unfortunately, your account has not been approved.
 
-                Причина: {{reason}}
+                Reason: {{reason}}
 
-                Якщо маєте питання — зверніться до нас: {{supportEmail}}
+                If you have questions, please contact us: {{supportEmail}}
 
-                Команда NTI""",
+                NTI Team""",
                 "{{name}},{{reason}},{{supportEmail}}");
 
         seed(EmailTemplateType.ACCOUNT_SUSPENDED,
-                "NTI — Акаунт заблоковано",
+                "NTI — Account suspended",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                Ваш акаунт було заблоковано.
+                Your account has been suspended.
 
-                Причина: {{reason}}
+                Reason: {{reason}}
 
-                Якщо маєте питання — зверніться до нас: {{supportEmail}}
+                If you have questions, please contact us: {{supportEmail}}
 
-                Команда NTI""",
+                NTI Team""",
                 "{{name}},{{reason}},{{supportEmail}}");
 
         seed(EmailTemplateType.MENTOR_ASSIGNED,
-                "NTI — До вашого проєкту призначено ментора",
+                "NTI — A mentor has been assigned to your project",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                До вашого проєкту призначено ментора: {{mentorName}}
+                A mentor has been assigned to your project: {{mentorName}}
 
-                Ментор зв'яжеться з вами найближчим часом для узгодження першої консультації.
+                The mentor will contact you shortly to schedule the first consultation.
 
-                Деталі у вашому кабінеті:
+                View details in your account:
                 {{link}}
 
-                Команда NTI""",
+                NTI Team""",
                 "{{name}},{{mentorName}},{{link}}");
 
         seed(EmailTemplateType.DEADLINE_REMINDER,
-                "NTI — Нагадування: дедлайн через {{daysLeft}} днів",
+                "NTI — Reminder: deadline in {{daysLeft}} days",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                Нагадуємо, що дедлайн для подачі заявки на «{{callTitle}}» спливає через {{daysLeft}} днів.
+                This is a reminder that the submission deadline for "{{callTitle}}" is in {{daysLeft}} days.
 
-                Перейдіть до вашої заявки:
+                Go to your application:
                 {{link}}
 
-                Команда NTI""",
+                NTI Team""",
                 "{{name}},{{callTitle}},{{daysLeft}},{{link}}");
 
         seed(EmailTemplateType.PROJECT_CLOSED,
-                "NTI — Проєкт завершено",
+                "NTI — Project completed",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                Ваш проєкт «{{projectTitle}}» успішно завершено та переведено в архів.
+                Your project "{{projectTitle}}" has been successfully completed and archived.
 
-                Дякуємо за участь у програмі NTI!
+                Thank you for participating in the NTI program!
 
-                Команда NTI""",
+                NTI Team""",
                 "{{name}},{{projectTitle}}");
 
         seed(EmailTemplateType.BULK_MESSAGE,
@@ -243,38 +243,38 @@ public class EmailTemplateService {
                 {{body}}
 
                 --
-                Це повідомлення надіслано адміністратором NTI. Не відповідайте на цей лист.""",
+                This message was sent by the NTI administrator. Please do not reply to this email.""",
                 "subject,body");
 
         seed(EmailTemplateType.COMPLETION_REJECTED,
-                "NTI — Запит на завершення проекту відхилено",
+                "NTI — Project completion request rejected",
                 """
-                Вітаємо, {{name}}!
+                Hello, {{name}}!
 
-                Адміністратор відхилив ваш запит на завершення проекту «{{projectName}}».
+                The administrator has rejected your project completion request for "{{projectName}}".
 
-                Проект залишається активним. Якщо у вас є питання — зверніться до адміністратора.
+                The project remains active. If you have any questions, please contact the administrator.
 
-                Команда NTI""",
+                NTI Team""",
                 "name,projectName");
 
         seed(EmailTemplateType.TEAM_INVITE_UNREGISTERED,
-                "NTI — Запрошення до команди «{{teamName}}»",
+                "NTI — Invitation to join team \"{{teamName}}\"",
                 """
-                Вітаємо!
+                Hello!
 
-                Вас запрошують до команди «{{teamName}}» на платформі NTI.
+                You have been invited to join the team "{{teamName}}" on the NTI platform.
 
-                Для того щоб прийняти участь, перейдіть за посиланням:
+                To participate, please click the link below:
 
                 {{link}}
 
-                Вам потрібно буде вказати ваше ім'я та пароль.
-                Після реєстрації ви зможете прийняти або відхилити запрошення в особистому кабінеті.
+                You will need to provide your name and set a password.
+                After registration, you can accept or decline the invitation in your personal account.
 
-                Посилання дійсне 7 днів.
+                The link is valid for 7 days.
 
-                Команда NTI""",
+                NTI Team""",
                 "teamName,link");
     }
 

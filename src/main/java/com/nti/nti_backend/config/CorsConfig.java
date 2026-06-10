@@ -10,7 +10,7 @@ import org.springframework.web.client.RestTemplate;
 
 @Configuration
 public class CorsConfig {
-    // CORS налаштований в SecurityConfig
+    // CORS is configured in SecurityConfig
     @Bean
     @Primary // This ensures this mapper is used for all REST controllers
     public ObjectMapper objectMapper() {
