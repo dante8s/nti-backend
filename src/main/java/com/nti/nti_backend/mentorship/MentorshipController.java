@@ -5,6 +5,7 @@ import com.nti.nti_backend.mentorship.entity.MentorshipStatus;
 import com.nti.nti_backend.user.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -37,6 +38,16 @@ public class MentorshipController {
     public ResponseEntity<List<MentorshipResponseDTO>> getMyMentorships(
             @AuthenticationPrincipal User user
     ) {
+        // 1. Log the user to see if it is null
+        if (user == null) {
+            System.out.println("DEBUG: User is NULL in getMyMentorships");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build(); // Return 400 if user is null
+        }
+
+        // 2. Log the ID
+        System.out.println("DEBUG: Fetching mentorships for User ID: " + user.getId());
+
+        // 3. Proceed
         return ResponseEntity.ok(mentorshipService.getMyMentorships(user.getId()));
     }
 

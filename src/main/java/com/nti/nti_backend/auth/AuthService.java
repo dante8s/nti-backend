@@ -94,6 +94,9 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
+        if (user.hasRole(Role.MENTOR)) {
+            clearMentorCache();
+        }
 
         try {
             emailService.sendVerificationEmail(user.getEmail(), verificationToken);
@@ -194,6 +197,7 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setInviteToken(null);
         userRepository.save(user);
+        clearMentorCache();
 
         // Send notification to admin to approve the user
         try {
@@ -427,6 +431,13 @@ public class AuthService {
         user.setResetPasswordToken(null);
         user.setResetTokenExpiry(null);
         userRepository.save(user);
+    }
+
+    private void clearMentorCache() {
+        Cache c = cacheManager.getCache(CacheNames.MENTORS_PUBLIC);
+        if (c != null) {
+            c.clear();
+        }
     }
 
     public List<UserDTO> getPendingUsers() {
