@@ -20,6 +20,10 @@ public class RecaptchaService {
     private final RestTemplate restTemplate;
 
     public boolean verify(String captchaToken) {
+        if (secretKey == null || secretKey.isBlank()) {
+            return true;
+        }
+
         // If the token is empty — reject immediately
         if (captchaToken == null
                 || captchaToken.isBlank()) {
