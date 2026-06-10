@@ -146,7 +146,7 @@ public class ReportingController {
             @RequestParam(required = false) Integer minMembers,
             @AuthenticationPrincipal User actor) {
         try {
-            auditService.log(actor, "EXPORT", null, callId,
+            auditService.log(actor, "EXPORT", "REPORT", callId,
                     "Експорт " + format.toUpperCase() + " звіту типу: " + reportType);
             String type = reportType == null ? "applications" : reportType.trim().toLowerCase(Locale.ROOT);
             byte[] body = switch (type) {
