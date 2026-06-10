@@ -11,9 +11,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class RecaptchaService {
 
-    @Value("${recaptcha.enabled:false}")
-    private boolean enabled;
-
     @Value("${recaptcha.secret}")
     private String secretKey;
 
@@ -23,15 +20,6 @@ public class RecaptchaService {
     private final RestTemplate restTemplate;
 
     public boolean verify(String captchaToken) {
-        if (!enabled) {
-            return true;
-        }
-
-        // If secret is not configured — pass through (local development)
-        if (secretKey == null || secretKey.isBlank()) {
-            return true;
-        }
-
         // If the token is empty — reject immediately
         if (captchaToken == null
                 || captchaToken.isBlank()) {
