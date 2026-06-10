@@ -24,13 +24,13 @@ public class MilestoneController {
     private static final String WRITE_ROLES =
             "hasAnyRole('ADMIN','SUPER_ADMIN','MENTOR','STUDENT')";
     private static final String READ_ROLES =
-            "hasAnyRole('ADMIN','SUPER_ADMIN','MENTOR','STUDENT','FIRM','FIRM_USER')";
+            "hasAnyRole('ADMIN','SUPER_ADMIN','MENTOR','STUDENT','FIRM')";
 
     private final MilestoneService milestoneService;
 
     // POST /api/milestones
     @PostMapping
-    @PreAuthorize(WRITE_ROLES)
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','STUDENT', 'FIRM')")
     public ResponseEntity<MilestoneResponseDTO> create(
             @Valid @RequestBody MilestoneRequestDTO dto
             ) {
@@ -70,7 +70,7 @@ public class MilestoneController {
 
     // PUT /api/milestones/{id} - title, description, dueDate
     @PutMapping("/{id}")
-    @PreAuthorize(WRITE_ROLES)
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','STUDENT', 'FIRM')")
     public ResponseEntity<MilestoneResponseDTO> update(
             @PathVariable UUID id,
             @Valid @RequestBody MilestoneRequestDTO dto
@@ -80,7 +80,7 @@ public class MilestoneController {
 
     // PATCH /api/milestones/{id}/status - status
     @PatchMapping("/{id}/status")
-    @PreAuthorize(WRITE_ROLES)
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','MENTOR')")
     public ResponseEntity<MilestoneResponseDTO> changeStatus(
             @PathVariable UUID id,
             @Valid @RequestBody ChangeStatusRequestDTO dto
@@ -96,7 +96,6 @@ public class MilestoneController {
     }
 
     @PostMapping("/{id}/comments")
-    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<MilestoneCommentDTO> addComment(
             @PathVariable UUID id,
             @Valid @RequestBody MilestoneCommentRequest dto,
@@ -107,7 +106,6 @@ public class MilestoneController {
     }
 
     @GetMapping("/{id}/comments")
-    @PreAuthorize(READ_ROLES)
     public ResponseEntity<List<MilestoneCommentDTO>> getComments(
             @PathVariable UUID id
     ) {
@@ -115,7 +113,6 @@ public class MilestoneController {
     }
 
     @DeleteMapping("/{id}/comments/{commentId}")
-    @PreAuthorize(WRITE_ROLES)
     public ResponseEntity<Void> deleteComment(
             @PathVariable UUID id,
             @PathVariable UUID commentId,

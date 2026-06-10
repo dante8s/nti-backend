@@ -1,7 +1,7 @@
 
 HELP.md
 
-# Environment secrets — copy .env.example → .env and fill in values
+# Environment secrets — copy .env → .env and fill in values
 .env
 
 # Build output (never commit)
