@@ -1,5 +1,4 @@
 
-
 HELP.md
 
 # Environment secrets — copy .env.example → .env and fill in values
@@ -44,3 +43,5 @@ build/
 
 ### VS Code ###
 .vscode/
+
+uploads/

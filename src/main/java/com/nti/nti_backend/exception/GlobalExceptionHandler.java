@@ -1,5 +1,6 @@
 package com.nti.nti_backend.exception;
 
+import com.nti.nti_backend.organization.exception.ResourceNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -68,5 +69,10 @@ public class GlobalExceptionHandler {
         body.put("status", status.value());
         body.put("error", message);
         return body;
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(ResourceNotFoundException ex) {
+        return buildError(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 }

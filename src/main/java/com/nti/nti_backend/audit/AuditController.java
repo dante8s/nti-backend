@@ -56,7 +56,11 @@ public class AuditController {
                             || "ROLE_EVALUATOR".equals(auth)
                             || "ROLE_SUPER_EVALUATOR".equals(auth);
                 });
-        if (!privileged && !application.getApplicant().getId().equals(user.getId())) {
+
+        boolean isTeamMember = application.getTeamSnapshot() != null && application.getTeamSnapshot().stream()
+                .anyMatch(member -> member.getUserId() != null && member.getUserId().equals(user.getId()));
+
+        if (!privileged && !application.getApplicant().getId().equals(user.getId()) && !isTeamMember) {
             throw new ResponseStatusException(
                     FORBIDDEN,
                     "Немає доступу до аудиту цієї заявки"
