@@ -19,7 +19,7 @@ public interface UserRepository
     Optional<User> findByResetPasswordToken(
             String resetPasswordToken);
 
-    // Всі юзери що чекають схвалення
+    // All users awaiting approval
     List<User> findByAccountStatus(AccountStatus status);
 
     // Тільки ті що підтвердили email і чекають схвалення

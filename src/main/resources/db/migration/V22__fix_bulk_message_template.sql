@@ -2,5 +2,5 @@ UPDATE email_templates
 SET body = '{{body}}
 
 --
-Це повідомлення надіслано адміністратором NTI. Не відповідайте на цей лист.'
+This message was sent by the NTI administrator. Please do not reply to this email.'
 WHERE type = 'BULK_MESSAGE';

@@ -1,8 +1,8 @@
 package com.nti.nti_backend.application;
 
 /**
- * Запит на оновлення чернетки заявки.
- * formData — JSON-рядок з довільними полями форми.
+ * Request to update an application draft.
+ * formData — JSON string with arbitrary form fields.
  */
 public record UpdateApplicationRequest(
         String formData

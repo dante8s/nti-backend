@@ -7,13 +7,12 @@ import jakarta.validation.constraints.NotBlank;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record LoginRequest(
 
-        @Email(message = "Невірний формат email")
-        @NotBlank(message = "Email обов'язковий")
+        @Email(message = "Invalid email format")
+        @NotBlank(message = "Email is required")
         String email,
 
-        @NotBlank(message = "Пароль обов'язковий")
+        @NotBlank(message = "Password is required")
         String password,
 
-        @NotBlank(message = "Підтвердіть що ви не робот")
         String captchaToken
 ) {}

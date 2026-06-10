@@ -23,7 +23,7 @@ public class MentorshipController {
 
     private final MentorshipService mentorshipService;
 
-    // POST /api/mentorships — тільки адмін призначає ментора
+    // POST /api/mentorships — only admin assigns a mentor
     @PostMapping("/mentorships")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<MentorshipResponseDTO> assignMentor(
@@ -75,13 +75,13 @@ public class MentorshipController {
         return ResponseEntity.ok(mentorshipService.closeMentorship(id, status));
     }
 
-    // GET /api/public/mentors — публічний, без @PreAuthorize (дозволено в SecurityConfig)
+    // GET /api/public/mentors — public, no @PreAuthorize (allowed in SecurityConfig)
     @GetMapping("/public/mentors")
     public ResponseEntity<List<PublicMentorDTO>> getPublicMentors() {
         return ResponseEntity.ok(mentorshipService.getPublicMentors());
     }
 
-    // GET /api/mentorships — всі менторства (тільки адмін)
+    // GET /api/mentorships — all mentorships (admin only)
     @GetMapping("/mentorships")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<MentorshipResponseDTO>> getAll() {

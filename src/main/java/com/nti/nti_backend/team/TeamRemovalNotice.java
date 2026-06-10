@@ -2,7 +2,7 @@ package com.nti.nti_backend.team;
 
 import java.time.LocalDateTime;
 
-/** Повідомлення для користувача, якого виключили з команди. */
+/** Notification for the user who was removed from the team. */
 public record TeamRemovalNotice(
         Long teamId,
         String teamName,

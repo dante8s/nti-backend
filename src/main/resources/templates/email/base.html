@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="uk">
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title th:text="${subject}">NTI Повідомлення</title>
+  <title th:text="${subject}">NTI Notification</title>
   <style>
     body { margin:0; padding:0; background:#f1f5f9; font-family: 'Segoe UI', Arial, sans-serif; }
     .wrapper { max-width:600px; margin:32px auto; background:#ffffff; border-radius:16px;
@@ -25,10 +25,10 @@
       <div class="header__tag">Nitriansky technologický inkubátor</div>
     </div>
     <div class="body">
-      <p th:text="${body}">Текст листа</p>
+      <p th:text="${body}">Email body</p>
     </div>
     <div class="footer">
-      © 2026 Nitriansky technologický inkubátor. Усі права захищено.
+      © 2026 Nitriansky technologický inkubátor. All rights reserved.
     </div>
   </div>
 </body>

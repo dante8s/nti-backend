@@ -108,25 +108,25 @@ public class TeamService {
     })
     public TeamMember inviteMember(Long teamId, Long invitedUserId) {
         Team team = teamRepository.findById(teamId)
-                .orElseThrow(() -> new IllegalStateException("Команду не знайдено"));
+                .orElseThrow(() -> new IllegalStateException("Team not found"));
         if (team.getLeader().getId().equals(invitedUserId)) {
-            throw new IllegalStateException("Лідер не може запросити сам себе");
+            throw new IllegalStateException("The leader cannot invite themselves");
         }
         if (applicationRepository.existsApprovedByApplicantId(team.getLeader().getId())) {
-            throw new IllegalStateException("Не можна запрошувати учасників: команда має схвалену заявку на програму");
+            throw new IllegalStateException("Cannot invite members: the team has an approved program application");
         }
         User invitedUser = userRepository.findById(invitedUserId)
                 .orElseThrow(() -> new IllegalStateException(
-                        "Користувача з id " + invitedUserId + " не існує в системі."));
+                        "User with id " + invitedUserId + " does not exist in the system."));
 
         if (teamMemberRepository.countAcceptedInOtherTeam(invitedUserId, teamId) > 0) {
             throw new IllegalStateException(
-                    "Користувач уже підтверджений учасником іншої команди");
+                    "User is already a confirmed member of another team");
         }
 
         long currentSize = teamMemberRepository.countAcceptedMembers(teamId);
         if (currentSize >= team.getMaxCapacity()) {
-            throw new IllegalStateException("У команді вже максимум учасників");
+            throw new IllegalStateException("The team is already at maximum capacity");
         }
 
         Optional<TeamMember> existing =
@@ -134,9 +134,9 @@ public class TeamService {
         if (existing.isPresent()) {
             TeamMember row = existing.get();
             if (row.getInviteStatus() == TeamMember.InviteStatus.ACCEPTED) {
-                throw new IllegalStateException("Користувач уже в складі команди");
+                throw new IllegalStateException("User is already a member of the team");
             }
-            // PENDING, REMOVED, DECLINED — повторне запрошення (необмежена кількість разів)
+            // PENDING, REMOVED, DECLINED — re-invite (unlimited number of times)
             row.setInviteStatus(TeamMember.InviteStatus.PENDING);
             row.setRole(TeamMember.TeamRole.MEMBER);
             row.setInvitedAt(LocalDateTime.now());
@@ -157,15 +157,15 @@ public class TeamService {
 
     public TeamMember inviteUnregisteredByEmail(Long teamId, String email) {
         Team team = teamRepository.findById(teamId)
-                .orElseThrow(() -> new IllegalStateException("Команду не знайдено"));
+                .orElseThrow(() -> new IllegalStateException("Team not found"));
 
         if (applicationRepository.existsApprovedByApplicantId(team.getLeader().getId())) {
-            throw new IllegalStateException("Не можна запрошувати учасників: команда має схвалену заявку на програму");
+            throw new IllegalStateException("Cannot invite members: the team has an approved program application");
         }
 
         long currentSize = teamMemberRepository.countAcceptedMembers(teamId);
         if (currentSize >= team.getMaxCapacity()) {
-            throw new IllegalStateException("У команді вже максимум учасників");
+            throw new IllegalStateException("The team is already at maximum capacity");
         }
 
         String inviteToken = UUID.randomUUID().toString();
@@ -206,22 +206,22 @@ public class TeamService {
     })
     public TeamMember respondToInvitation(Long teamId, Long userId, boolean accepted) {
         TeamMember membership = teamMemberRepository.findByTeam_IdAndUser_Id(teamId, userId)
-                .orElseThrow(() -> new IllegalStateException("Запрошення не знайдено"));
+                .orElseThrow(() -> new IllegalStateException("Invitation not found"));
 
         if (membership.getInviteStatus() != TeamMember.InviteStatus.PENDING) {
-            throw new IllegalStateException("На це запрошення вже відповіли");
+            throw new IllegalStateException("This invitation has already been responded to");
         }
 
-        // Перевірки тільки поки в БД ще PENDING — інакше flush може бачити цей рядок як ACCEPTED
-        // і existsByUser_IdAndInviteStatus хибно спрацює.
+        // Checks only while the DB row is still PENDING — otherwise flush may see this row as ACCEPTED
+        // and existsByUser_IdAndInviteStatus will trigger incorrectly.
         if (accepted) {
             if (teamMemberRepository.countAcceptedInOtherTeam(userId, teamId) > 0) {
                 throw new IllegalStateException(
-                        "Ви вже підтверджені учасником іншої команди. Спочатку вийдіть з неї, щоб приєднатися до цієї.");
+                        "You are already a confirmed member of another team. Please leave it first to join this one.");
             }
             long currentSize = teamMemberRepository.countAcceptedMembers(teamId);
             if (currentSize >= membership.getTeam().getMaxCapacity()) {
-                throw new IllegalStateException("У команді вже максимум учасників");
+                throw new IllegalStateException("The team is already at maximum capacity");
             }
         }
 
@@ -253,8 +253,8 @@ public class TeamService {
     }
 
     /**
-     * Лідер скасовує запрошення (PENDING) або виключає учасника (ACCEPTED).
-     * Статус REMOVED — для повідомлення на сторінці «Моя команда».
+     * Leader cancels an invitation (PENDING) or removes a member (ACCEPTED).
+     * Status REMOVED — for the notification on the "My Team" page.
      */
     @Caching(evict = {
             @CacheEvict(value = TEAM, key = "#teamId"),
@@ -274,15 +274,15 @@ public class TeamService {
             throw new IllegalStateException("Leader cannot be removed from the team");
         }
         if (!admin && applicationRepository.existsApprovedByApplicantId(team.getLeader().getId())) {
-            throw new IllegalStateException("Не можна змінювати склад команди: є схвалена заявка на програму");
+            throw new IllegalStateException("Cannot change team composition: there is an approved program application");
         }
         TeamMember membership = teamMemberRepository.findByTeam_IdAndUser_Id(teamId, memberUserId)
-            .orElseThrow(() -> new IllegalStateException("Учасника не знайдено в цій команді"));
+            .orElseThrow(() -> new IllegalStateException("Member not found in this team"));
 
         TeamMember.InviteStatus st = membership.getInviteStatus();
 
         if(st != TeamMember.InviteStatus.PENDING && st != TeamMember.InviteStatus.ACCEPTED) {
-            throw new IllegalStateException("Цього учасника вже немає в активному складі");
+            throw new IllegalStateException("This member is no longer in the active roster");
         }
 
         membership.setInviteStatus(TeamMember.InviteStatus.REMOVED);
@@ -329,14 +329,14 @@ public class TeamService {
     })
     public void deleteTeam(Long teamId, Long requesterUserId, boolean admin) {
         Team team = teamRepository.findByIdWithMembers(teamId)
-                .orElseThrow(() -> new IllegalStateException("Команду не знайдено"));
+                .orElseThrow(() -> new IllegalStateException("Team not found"));
 
         Long leaderId = team.getLeader().getId();
         if (!admin && !leaderId.equals(requesterUserId)) {
-            throw new IllegalStateException("Лише лідер команди може її видалити");
+            throw new IllegalStateException("Only the team leader can delete the team");
         }
         if (!admin && applicationRepository.existsApprovedByApplicantId(leaderId)) {
-            throw new IllegalStateException("Не можна видалити команду: є схвалена заявка на програму");
+            throw new IllegalStateException("Cannot delete the team: there is an approved program application");
         }
 
         teamMemberRepository.deleteByTeam_Id(teamId);
@@ -406,7 +406,7 @@ public class TeamService {
             email = user.getEmail();
             String name = user.getName();
             displayName = (name != null && !name.isBlank())
-                    ? name : "Користувач #" + user.getId();
+                    ? name : "User #" + user.getId();
         }
         String teamName = member.getTeam() != null
                 ? member.getTeam().getName() : null;

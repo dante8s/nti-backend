@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Перегляд / статус документів заявки — винесено з {@link ApplicationController},
- * щоб рідше чіпати спільний контролер при зміні роботи з файлами.
+ * View / status of application documents — extracted from {@link ApplicationController}
+ * to reduce changes to the shared controller when file handling changes.
  */
 @RestController
 @RequestMapping("/api")
@@ -34,10 +34,10 @@ public class ApplicationDocumentController {
         try {
             return ResponseEntity.ok(appService.getDocumentStatus(id, user));
         } catch (RuntimeException e) {
-            if ("Немає доступу".equals(e.getMessage())) {
+            if ("Access denied".equals(e.getMessage())) {
                 return ResponseEntity.status(403).build();
             }
-            if ("Заявку не знайдено".equals(e.getMessage())) {
+            if ("Application not found".equals(e.getMessage())) {
                 return ResponseEntity.notFound().build();
             }
             throw e;
@@ -45,7 +45,7 @@ public class ApplicationDocumentController {
     }
 
     /**
-     * Перегляд / завантаження файлу (inline для iframe; disposition=attachment — зберегти).
+     * View / download file (inline for iframe; disposition=attachment — save to disk).
      */
     @GetMapping("/applications/{id}/documents/{documentType}")
     @PreAuthorize("hasAnyRole('STUDENT','MENTOR','EVALUATOR','SUPER_EVALUATOR','ADMIN','SUPER_ADMIN','FIRM','FIRM_USER')")
@@ -73,7 +73,7 @@ public class ApplicationDocumentController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         } catch (RuntimeException e) {
-            if ("Немає доступу".equals(e.getMessage())) {
+            if ("Access denied".equals(e.getMessage())) {
                 return ResponseEntity.status(403).build();
             }
             return ResponseEntity.notFound().build();

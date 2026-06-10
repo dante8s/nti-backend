@@ -43,8 +43,8 @@ public class Application {
     private String adminComment;
 
     /**
-     * Довільні дані форми у форматі JSON.
-     * Зберігається як текст, щоб не прив'язуватись до схеми.
+     * Arbitrary form data in JSON format.
+     * Stored as text to avoid coupling to a fixed schema.
      */
     @Column(columnDefinition = "TEXT")
     private String formData;

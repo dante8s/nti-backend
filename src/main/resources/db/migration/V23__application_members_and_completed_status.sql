@@ -1,4 +1,4 @@
--- Снапшот учасників команди на момент подачі заявки
+-- Snapshot of team members at the time of application submission
 CREATE TABLE IF NOT EXISTS application_members (
     id BIGSERIAL PRIMARY KEY,
     application_id BIGINT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
@@ -10,6 +10,6 @@ CREATE TABLE IF NOT EXISTS application_members (
 CREATE INDEX IF NOT EXISTS idx_application_members_application_id ON application_members(application_id);
 CREATE INDEX IF NOT EXISTS idx_application_members_user_id ON application_members(user_id);
 
--- Новий статус COMPLETED для заявок (якщо використовується CHECK constraint)
--- PostgreSQL enum або рядкові значення — нічого додавати не треба,
--- бо статус зберігається як VARCHAR через @Enumerated(EnumType.STRING)
+-- New COMPLETED status for applications (if a CHECK constraint is used)
+-- PostgreSQL enum or string values — nothing to add,
+-- because the status is stored as VARCHAR via @Enumerated(EnumType.STRING)

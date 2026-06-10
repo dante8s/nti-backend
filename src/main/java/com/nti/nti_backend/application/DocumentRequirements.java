@@ -12,61 +12,61 @@ public class DocumentRequirements {
             case PROGRAM_A -> List.of(
                     new RequiredDocument(
                             DocumentType.RESUME_A,
-                            "Резюме",
-                            "Короткий опис проблеми, рішення, "
-                                    + "ринку та переваг"
+                            "Resume",
+                            "Brief description of the problem, solution, "
+                                    + "market, and benefits"
                     ),
                     new RequiredDocument(
                             DocumentType.TECHNICAL_ARCH,
-                            "Технічна архітектура",
-                            "Опис рішення, технологій, "
-                                    + "модулів і роботи"
+                            "Technical Architecture",
+                            "Description of the solution, technologies, "
+                                    + "modules, and operations"
                     ),
                     new RequiredDocument(
                             DocumentType.ROADMAP,
-                            "Дорожня карта",
-                            "Віхи, дорожня карта та хронологія"
+                            "Roadmap",
+                            "Milestones, roadmap, and timeline"
                     ),
                     new RequiredDocument(
                             DocumentType.BUDGET,
-                            "Бюджет",
-                            "План розтягування грантів "
-                                    + "та очікувані витрати"
+                            "Budget",
+                            "Grant allocation plan "
+                                    + "and expected expenses"
                     ),
                     new RequiredDocument(
                             DocumentType.RISK_ANALYSIS,
-                            "Аналіз ризиків",
-                            "Виявлення ризиків, впливів "
-                                    + "і заходів пом'якшення"
+                            "Risk Analysis",
+                            "Risk identification, impact assessment, "
+                                    + "and mitigation measures"
                     ),
                     new RequiredDocument(
                             DocumentType.MONETIZATION,
-                            "Модель монетизації",
-                            "Спосіб створити цінність "
-                                    + "продукту та дохід"
+                            "Monetization Model",
+                            "How to create product value "
+                                    + "and generate revenue"
                     )
             );
             case PROGRAM_B -> List.of(
                     new RequiredDocument(
                             DocumentType.RESUME_B,
-                            "Резюме",
-                            "Резюме команди та досвід"
+                            "Resume",
+                            "Team resume and experience"
                     ),
                     new RequiredDocument(
                             DocumentType.MOTIVATION,
-                            "Мотивація",
-                            "Чому ваша команда підходить "
-                                    + "для цього проекту"
+                            "Motivation",
+                            "Why your team is a good fit "
+                                    + "for this project"
                     ),
                     new RequiredDocument(
                             DocumentType.SOLUTION_PROPOSAL,
-                            "Пропозиція рішення",
-                            "Як ви вирішите поставлене завдання"
+                            "Solution Proposal",
+                            "How you will solve the given task"
                     ),
                     new RequiredDocument(
                             DocumentType.IMPLEMENTATION,
-                            "Впровадження",
-                            "План впровадження та технології"
+                            "Implementation",
+                            "Implementation plan and technologies"
                     )
             );
         };

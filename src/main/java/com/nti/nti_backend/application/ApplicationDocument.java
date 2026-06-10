@@ -29,11 +29,11 @@ public class ApplicationDocument {
     private String filePath;
 
     @Column(nullable = false)
-    private String fileType; // PDF або DOCX
+    private String fileType; // PDF or DOCX
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private DocumentType documentType; // тип документу
+    private DocumentType documentType; // document type
 
     @CreationTimestamp
     private LocalDateTime uploadedAt;

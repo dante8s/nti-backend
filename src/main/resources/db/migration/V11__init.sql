@@ -1,4 +1,4 @@
--- V11: команди, профілі студентів, критерії та оцінки (PostgreSQL, узгоджено з JPA-сутностями)
+-- V11: teams, student profiles, criteria and evaluations (PostgreSQL, aligned with JPA entities)
 
 CREATE TABLE teams (
     id             BIGSERIAL PRIMARY KEY,

@@ -18,7 +18,7 @@ public class UserService implements UserDetailsService {
         return userRepository.findByEmail(email)
                 .orElseThrow(() ->
                         new UsernameNotFoundException(
-                                "Користувача не знайдено: " + email
+                                "User not found: " + email
                         )
                 );
     }
@@ -27,7 +27,7 @@ public class UserService implements UserDetailsService {
         return userRepository.findById(id)
                 .orElseThrow(() ->
                         new RuntimeException(
-                                "Користувача не знайдено"
+                                "User not found"
                         )
                 );
     }

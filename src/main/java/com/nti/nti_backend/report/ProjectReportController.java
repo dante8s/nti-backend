@@ -38,7 +38,7 @@ public class ProjectReportController {
     }
 
     private ResponseEntity<byte[]> buildCsvResponse(String csv, String filename) {
-        byte[] bytes = ("﻿" + csv).getBytes(StandardCharsets.UTF_8); // BOM для Excel
+        byte[] bytes = ("﻿" + csv).getBytes(StandardCharsets.UTF_8); // BOM for Excel
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))

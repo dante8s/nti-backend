@@ -5,6 +5,6 @@ public record DocumentStatusDTO(
         String label,
         String description,
         boolean uploaded,
-        String fileName,    // null якщо не завантажено
-        Long documentId     // null якщо не завантажено
+        String fileName,    // null if not uploaded
+        Long documentId     // null if not uploaded
 ) {}

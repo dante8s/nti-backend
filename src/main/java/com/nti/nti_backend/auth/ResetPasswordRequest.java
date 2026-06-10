@@ -5,10 +5,10 @@ import jakarta.validation.constraints.Size;
 
 public record ResetPasswordRequest(
 
-        @NotBlank(message = "Токен обов'язковий")
+        @NotBlank(message = "Token is required")
         String token,
 
-        @Size(min = 6, message = "Мінімум 6 символів")
-        @NotBlank(message = "Пароль обов'язковий")
+        @Size(min = 6, message = "Minimum 6 characters")
+        @NotBlank(message = "Password is required")
         String newPassword
 ) {}

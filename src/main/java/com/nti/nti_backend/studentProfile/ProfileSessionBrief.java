@@ -2,7 +2,7 @@ package com.nti.nti_backend.studentProfile;
 
 import java.util.Set;
 
-/** Мінімальні дані сесії для фронту (id + ролі) — узгоджено з Jwt / User. */
+/** Minimal session data for the frontend (id + roles) — aligned with Jwt / User. */
 public record ProfileSessionBrief(
         Long userId,
         String name,

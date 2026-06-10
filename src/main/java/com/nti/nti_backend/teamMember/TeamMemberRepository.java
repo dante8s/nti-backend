@@ -41,7 +41,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
     boolean existsByUser_IdAndInviteStatus(Long userId, TeamMember.InviteStatus status);
 
-    /** Кількість ACCEPTED-членств користувача в інших командах (не {@code teamId}). */
+    /** Count of ACCEPTED memberships for the user in other teams (not {@code teamId}). */
     @Query("""
             SELECT COUNT(m) FROM TeamMember m
             WHERE m.user.id = :userId

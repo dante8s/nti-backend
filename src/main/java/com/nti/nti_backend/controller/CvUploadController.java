@@ -118,8 +118,8 @@ public class CvUploadController {
     }
 
     /**
-     * Чи користувач на своєму боці готовий переходити до заявки на виклик (профіль + команда).
-     * Не змінює модуль applications — лише підказка для UI.
+     * Whether the user is ready to proceed with a call application (profile + team).
+     * Does not modify the applications module — just a hint for the UI.
      */
     @GetMapping("/me/call-application-eligibility")
     @PreAuthorize("hasAnyRole('STUDENT','ADMIN','SUPER_ADMIN')")
@@ -137,7 +137,7 @@ public class CvUploadController {
                         .map(StudentProfile::isProfileComplete)
                         .orElse(false);
 
-        // Перевірка: команда укомплектована (кількість ACCEPTED == maxCapacity)
+        // Check: team is fully assembled (number of ACCEPTED == maxCapacity)
         boolean teamFull = false;
         if (teamLeader) {
             var team = teamRepository.findByLeader_Id(authUser.getId()).orElse(null);
@@ -156,19 +156,19 @@ public class CvUploadController {
                         !teamRepository.findAcceptedTeamsByUserId(authUser.getId()).isEmpty();
                 if (teamMember) {
                     reminders.add(
-                            "Ви учасник команди — подавати заявку на виклик може лише лідер.");
+                            "You are a team member — only the team leader can submit a call application.");
                 } else {
                     reminders.add(
-                            "Створіть команду й будьте її лідером (сторінка «Моя команда»).");
+                            "Create a team and be its leader (see the 'My Team' page).");
                 }
             }
             if (teamLeader && !teamFull) {
                 reminders.add(
-                        "Команда ще не укомплектована. Потрібно набрати максимальну кількість учасників.");
+                        "The team is not yet fully assembled. You need to reach the maximum number of members.");
             }
             if (!profileComplete) {
                 reminders.add(
-                        "Завершіть студентський профіль і завантажте CV.");
+                        "Complete your student profile and upload your CV.");
             }
         }
         return ResponseEntity.ok(new CallApplicationEligibility(
@@ -430,7 +430,7 @@ public class CvUploadController {
                     ct = MediaType.parseMediaType(probed);
                 }
             } catch (IOException | IllegalArgumentException ignored) {
-                // залишаємо ct за іменем файлу
+                // keep ct based on filename
             }
             return ResponseEntity.ok()
                     .contentType(ct)

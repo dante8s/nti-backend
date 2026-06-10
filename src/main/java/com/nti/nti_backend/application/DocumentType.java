@@ -3,20 +3,20 @@ package com.nti.nti_backend.application;
 public enum DocumentType {
 
     // Program A
-    RESUME_A,           // Резюме
-    TECHNICAL_ARCH,     // Технічна архітектура
-    ROADMAP,            // Дорожня карта
-    BUDGET,             // Бюджет
-    RISK_ANALYSIS,      // Аналіз ризиків
-    MONETIZATION,       // Модель монетизації
+    RESUME_A,           // Resume
+    TECHNICAL_ARCH,     // Technical architecture
+    ROADMAP,            // Roadmap
+    BUDGET,             // Budget
+    RISK_ANALYSIS,      // Risk analysis
+    MONETIZATION,       // Monetization model
 
     // Program B
-    RESUME_B,           // Резюме
-    MOTIVATION,         // Мотивація
-    SOLUTION_PROPOSAL,  // Пропозиція рішення
-    IMPLEMENTATION,     // Впровадження
+    RESUME_B,           // Resume
+    MOTIVATION,         // Motivation
+    SOLUTION_PROPOSAL,  // Solution proposal
+    IMPLEMENTATION,     // Implementation
 
-    // Результати проекту (обидві програми)
-    RESULT_1,           // Результатний документ 1
-    RESULT_2            // Результатний документ 2
+    // Project results (both programs)
+    RESULT_1,           // Result document 1
+    RESULT_2            // Result document 2
 }

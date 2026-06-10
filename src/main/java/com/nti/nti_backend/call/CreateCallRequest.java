@@ -8,11 +8,11 @@ import java.time.LocalDateTime;
 
 public record CreateCallRequest(
 
-        @NotBlank(message = "Назва обов'язкова")
+        @NotBlank(message = "Title is required")
         String title,
 
-        @NotNull(message = "Дедлайн обов'язковий")
-        @Future(message = "Дедлайн має бути в майбутньому")
+        @NotNull(message = "Deadline is required")
+        @Future(message = "Deadline must be in the future")
         LocalDateTime deadline,
 
         String evaluationCriteria
