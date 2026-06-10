@@ -90,7 +90,7 @@ public class ApplicationService {
             Map.entry(ApplicationStatus.SUSPENDED,
                     List.of(ApplicationStatus.ACTIVE, ApplicationStatus.ARCHIVED)),
             Map.entry(ApplicationStatus.COMPLETION_REQUESTED,
-                    List.of(ApplicationStatus.COMPLETED, ApplicationStatus.APPROVED))
+                    List.of(ApplicationStatus.COMPLETED, ApplicationStatus.APPROVED, ApplicationStatus.COMPLETION_PO_APPROVED))
     );
 
     // Створити draft

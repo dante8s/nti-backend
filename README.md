@@ -20,7 +20,7 @@ git clone <frontend-repo-url> nti-frontend
 
 # 2. Create your .env from the example
 cd nti-backend
-cp .env.example .env
+cp .env .env
 # Edit .env — fill in JWT_SECRET, RECAPTCHA_SECRET, and email credentials (see below)
 
 # 3. Start everything (DB + backend + frontend)
